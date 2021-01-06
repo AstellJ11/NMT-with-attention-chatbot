@@ -2,6 +2,7 @@ import json
 import tqdm as tqdm
 import os, sys
 import logging
+from pathlib import Path
 
 from downloading_data import init_logging
 
@@ -12,18 +13,20 @@ current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent di
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-
-def add_dialogue_index(prefix, all_dialogue):  # TO DO
-    return {
-        prefix + "_" + str(idx): all_dialogue[idx]
-        for idx in range(len(all_dialogue))
-    }
-
-
 train_dir = "data/dstc8-schema-guided-dialogue/train"
 all_dialogs = []  # Create an empty list array
 
-for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Processing'):  # Display progress bar during loop
+# Create processed_data folder for all dialog
+new_dir = Path(current_dir, "processed_data/train")
+
+try:
+    os.makedirs(new_dir)
+except OSError:
+    logger.info("Creation of the directory '%s' failed!" % new_dir)
+else:
+    logger.info("Successfully created the directory '%s'!" % new_dir)
+
+for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Extracting utterances'):  # Display progress bar during loop
 
     if 'schema.json' in file_name:
         continue
@@ -38,18 +41,29 @@ for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Processing'):  # Display
 
     for dialog in data:
         for item in dialog['turns']:
-            utterance = [[item['speaker'].capitalize(), item['utterance']]]  # Extract the system and user speech
-            for item in item['frames']:
-                intent = [[item['act']] for item in item['actions']]  # Extract the intent of the following speech
-                part_dialogs.append(intent)
-                part_dialogs.append(utterance)
+            utterance = [item['utterance']]  # Extract the system and user speech
+            part_dialogs.extend(utterance)
 
     all_dialogs.extend(part_dialogs)  # Add all elements of new dialog to overall list
 
-file_path = os.path.join(current_dir, "data/all_training_dialog.json")  # Defines the new list .json file
+delim = "\n"  # initializing delimiter
+temp = list(map(str, all_dialogs))  # Convert each list element to a string
+
+res = delim.join(temp)  # Add each individual utterance to a new line
+
+lines = res.splitlines()  # Split on new line
+
+# For every utterance create a tab break, for every other utterance create a new line
+processed = ''
+step_size = 2
+for i in range(0, len(lines), step_size):
+    processed += '\t'.join(lines[i:i + step_size]) + '\n'
+
+# File Saving
+file_path = Path(current_dir, "processed_data/train/all_training_dialog.txt")
 logger.info(f"Saving Schema Dialog data to {file_path}")
 
-# Save the .json file
-with open(file_path, "w") as fp:
-    json.dump(all_dialogs, fp, indent=4)
+save_path = open("processed_data/train/all_training_dialog.txt", "w")
+n = save_path.write(str(processed))
+save_path.close()
 logger.info("Processing Complete!")
