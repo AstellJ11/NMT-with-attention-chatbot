@@ -1,8 +1,10 @@
 
 data/
-
 __pycache__/
-
-.idea/inspectionProfiles/profiles_settings.xml
-
+.idea/inspectionProfiles/
 .idea/discord.xml
+.idea/other.xml
+
+processed_data/train/all_training_dialog.txt
+raw_data/dstc8-schema-guided-dialogue/
+test.py

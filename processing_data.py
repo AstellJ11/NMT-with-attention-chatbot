@@ -1,9 +1,9 @@
 import json
 import tqdm as tqdm
-import os, sys
+import os
+import sys
 import logging
 from pathlib import Path
-
 from downloading_data import init_logging
 
 init_logging()
@@ -13,7 +13,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent di
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-train_dir = "data/dstc8-schema-guided-dialogue/train"
+train_dir = "raw_data/dstc8-schema-guided-dialogue/train"
 all_dialogs = []  # Create an empty list array
 
 # Create processed_data folder for all dialog
