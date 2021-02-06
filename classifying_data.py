@@ -14,7 +14,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent di
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-path_to_file = current_dir + "/processed_data/train/all_training_dialog2.txt"
+path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"
 
 
 # Clean the sentences by removing punctuation and add tags at start and end of sentence
@@ -42,12 +42,7 @@ def create_dataset(path, num_examples):
     return zip(*word_pairs)
 
 
-# Display the cleaned formatted word pairs as example
-input, response = create_dataset(path_to_file, 50)  # Only loads the first 50 lines for efficiency of this example
-print(input[2])
-print(response[2])
-
-
+# Tokenise word pairs
 def tokenize(lang):
     lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='')
     lang_tokenizer.fit_on_texts(lang)
@@ -68,7 +63,7 @@ def load_dataset(path, num_examples=None):
     return input_tensor, response_tensor, inp_lang_tokenizer, resp_lang_tokenizer
 
 
-num_examples = 30000  # Change size of dataset here
+num_examples = 30000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_lang, resp_lang = load_dataset(path_to_file, num_examples)
 
@@ -80,26 +75,12 @@ input_tensor_train, response_tensor_train = (input_tensor, response_tensor)
 
 print(len(input_tensor_train), len(response_tensor_train))  # Length of each set
 
-
-def convert(lang, tensor):
-    for t in tensor:
-        if t != 0:
-            print("%d ----> %s" % (t, lang.index_word[t]))
-
-
-# Display tokenized version of selected text as example
-print("Input Language; index to word mapping")
-convert(inp_lang, input_tensor_train[0])
-print()
-print("Response Language; index to word mapping")
-convert(resp_lang, response_tensor_train[0])
-
 # Initialize the tf.data dataset variables
 BUFFER_SIZE = len(input_tensor_train)
-BATCH_SIZE = 32  # CHANGE
+BATCH_SIZE = 64  # CHANGEABLE (32 or 64)
 steps_per_epoch = len(input_tensor_train) // BATCH_SIZE
 embedding_dim = 256
-units = 1024
+units = 512  # CHANGEABLE (512 or 1024)
 vocab_inp_size = len(inp_lang.word_index) + 1
 vocab_tar_size = len(resp_lang.word_index) + 1
 
@@ -362,7 +343,35 @@ def response(sentence):
     plot_attention(attention_plot, sentence.split(' '), result.split(' '))
 
 
+def user_input():
+    while True:
+        try:
+            sentence = (input("Type: "))
+        except ValueError:
+            print("Sorry, I didn't understand that.")
+            continue
+        else:
+            response(sentence)
+
+
 # restoring the latest checkpoint in checkpoint_dir
 checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
-response(u'What type of place would you like to eat?')
+# Response asking the question
+# response(u'Do you have a specific which you want the eating place to be located at?')
+
+# Test dialogue
+response('Can you give me the address of this restaurant')
+
+response('Do they have live music?')
+
+response('I would like to make a booking please')
+
+response('Where can I go to eat near me?')
+
+response('Where can I get some pizza?')
+
+user_input()
+
+# ERROR HERE AS 'created' isn't in word_index
+# response('Your reservation was created. Thank you.')

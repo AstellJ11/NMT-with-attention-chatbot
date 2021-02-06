@@ -16,7 +16,7 @@ sys.path.insert(0, parent_dir)
 train_dir = "raw_data/dstc8-schema-guided-dialogue/train"
 all_dialogs = []  # Create an empty list array
 
-# Create processed_data folder for all dialog
+# Create processed_data folder for all dialogue
 new_dir = Path(current_dir, "processed_data/train")
 
 try:
@@ -33,18 +33,37 @@ for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Extracting utterances'):
 
     file_path = os.path.join(train_dir, file_name)  # Create new file path for each run of loop
 
-    # Open each dialog file
+    # Open each dialogue file
     with open(file_path, "r") as f:
         data = json.load(f)
 
-    part_dialogs = []  # Create an empty list for each dialog to be added too
+    part_dialogs = []  # Create an empty list for each dialogue to be added too
 
-    for dialog in data:
-        for item in dialog['turns']:
-            utterance = [item['utterance']]  # Extract the system and user speech
-            part_dialogs.extend(utterance)
+    # for dialogue in data:
+    #     theme = [dialogue['services']]
+    #     if theme not in part_dialogs:
+    #         part_dialogs.extend(theme)
+    # all_dialogs.extend(part_dialogs)  # Add all elements of new dialogue to overall list
 
-    all_dialogs.extend(part_dialogs)  # Add all elements of new dialog to overall list
+    # CURRENTLY WORKS AND EXTRACTS ALL 'Restaurants_1' EVEN IF MULTIPLE DOMAINS
+    # Look inside .json for utterance only in 'Restaurants_1'
+    for dialogue in data:
+        if 'Restaurants_1' in dialogue['services']:
+            for item in dialogue['turns']:
+                utterance = [item['utterance']]  # Extract the system and user speech
+                part_dialogs.extend(utterance)
+    all_dialogs.extend(part_dialogs)  # Add all elements of new dialogue to overall list
+
+# res_list = []
+#
+# for item in all_dialogs:
+#     if item not in res_list:
+#         res_list.append(item)
+#
+# print("Unique elements of the list using append():\n")
+# for item in res_list:
+#     print(item)
+
 
 delim = "\n"  # initializing delimiter
 temp = list(map(str, all_dialogs))  # Convert each list element to a string
@@ -60,10 +79,10 @@ for i in range(0, len(lines), step_size):
     processed += '\t'.join(lines[i:i + step_size]) + '\n'
 
 # File Saving
-file_path = Path(current_dir, "processed_data/train/all_training_dialog.txt")
-logger.info(f"Saving Schema Dialog data to {file_path}")
+file_path = Path(current_dir, "processed_data/train/all_training_dialogue.txt")
+logger.info(f"Saving Schema dialogue data to {file_path}")
 
-save_path = open("processed_data/train/all_training_dialog.txt", "w")
+save_path = open("processed_data/train/all_training_dialogue.txt", "w")
 n = save_path.write(str(processed))
 save_path.close()
 logger.info("Processing Complete!")

@@ -5,10 +5,11 @@ __pycache__/
 .idea/discord.xml
 .idea/other.xml
 
-processed_data/train/all_training_dialog.txt
+processed_data/train/all_training_dialogue.txt
 raw_data/dstc8-schema-guided-dialogue/
 test.py
 
 training_checkpoints/
 
-processed_data/train/all_training_dialog2.txt
+
+
