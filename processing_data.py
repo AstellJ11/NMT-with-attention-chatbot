@@ -1,32 +1,30 @@
 import json
-import tqdm as tqdm
 import os
 import sys
 import logging
+
 from pathlib import Path
+import tqdm as tqdm
+from pick import pick
+
 from downloading_data import init_logging
 
+# Initialise logger
 init_logging()
 logger = logging.getLogger(__name__)
 
-current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent directory
+# Access the parent directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 train_dir = "raw_data/dstc8-schema-guided-dialogue/train"
-all_dialogs = []  # Create an empty list array
+all_domains = []  # List array for domain names (including duplicates)
+unique_list = []  # List array to find unique domain names
+domain_names = []  # Final list array for all unique domains
 
-# Create processed_data folder for all dialogue
-new_dir = Path(current_dir, "processed_data/train")
-
-try:
-    os.makedirs(new_dir)
-except OSError:
-    logger.info("Creation of the directory '%s' failed!" % new_dir)
-else:
-    logger.info("Successfully created the directory '%s'!" % new_dir)
-
-for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Extracting utterances'):  # Display progress bar during loop
+# Gather list of domains from dataset
+for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Gathering domains'):  # Display progress bar during loop
 
     if 'schema.json' in file_name:
         continue
@@ -37,38 +35,65 @@ for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Extracting utterances'):
     with open(file_path, "r") as f:
         data = json.load(f)
 
-    part_dialogs = []  # Create an empty list for each dialogue to be added too
-
-    # for dialogue in data:
-    #     theme = [dialogue['services']]
-    #     if theme not in part_dialogs:
-    #         part_dialogs.extend(theme)
-    # all_dialogs.extend(part_dialogs)  # Add all elements of new dialogue to overall list
-
-    # CURRENTLY WORKS AND EXTRACTS ALL 'Restaurants_1' EVEN IF MULTIPLE DOMAINS
-    # Look inside .json for utterance only in 'Restaurants_1'
+    # Extract all domains from within 'services' dict
+    temp_domains = []
     for dialogue in data:
-        if 'Restaurants_1' in dialogue['services']:
+        theme = [dialogue['services']]
+        if theme not in temp_domains:
+            temp_domains.extend(theme)
+    all_domains.extend(temp_domains)
+
+    # Extract all unique domain names
+    for item in all_domains:
+        if item not in unique_list:
+            unique_list.append(item)
+
+# Convert list of list to flat base list
+flat_list = [item for sublist in unique_list for item in sublist]
+
+# Duplicates can still exist within list, final check and pass to domain_names
+for item in flat_list:
+    if item not in domain_names:
+        domain_names.append(item)
+
+# Create processed_data folder for all dialogue
+new_dir = Path(current_dir, "processed_data/train")
+try:
+    os.makedirs(new_dir)
+except OSError:
+    logger.info("Creation of the directory '%s' failed. It may already exist." % new_dir)
+else:
+    logger.info("Successfully created the directory '%s'!" % new_dir)
+
+# Allow the user to choose the domain being trained
+domain_question = 'Please choose a domain from the list you wish to talk about:  '
+domain_option, index = pick(domain_names, domain_question)
+
+all_dialogs = []  # List array for final extracted dialogs
+
+for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Extracting utterances'):  # Display progress bar during loop
+
+    if 'schema.json' in file_name:
+        continue
+
+    file_path = os.path.join(train_dir, file_name)
+
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    temp_dialogs = []
+    for dialogue in data:
+        if domain_option in dialogue['services']:
             for item in dialogue['turns']:
                 utterance = [item['utterance']]  # Extract the system and user speech
-                part_dialogs.extend(utterance)
-    all_dialogs.extend(part_dialogs)  # Add all elements of new dialogue to overall list
+                temp_dialogs.extend(utterance)
+    all_dialogs.extend(temp_dialogs)  # Add all elements of new dialogue to overall list
 
-# res_list = []
-#
-# for item in all_dialogs:
-#     if item not in res_list:
-#         res_list.append(item)
-#
-# print("Unique elements of the list using append():\n")
-# for item in res_list:
-#     print(item)
+# Process data into required format: I \t R \n I \t R...
+delim = "\n"  # Initialising delimiter
+temp_string = list(map(str, all_dialogs))  # Convert each list element to a string
 
-
-delim = "\n"  # initializing delimiter
-temp = list(map(str, all_dialogs))  # Convert each list element to a string
-
-res = delim.join(temp)  # Add each individual utterance to a new line
+res = delim.join(temp_string)  # Add each individual utterance to a new line
 
 lines = res.splitlines()  # Split on new line
 

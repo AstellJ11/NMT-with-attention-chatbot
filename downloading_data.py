@@ -3,16 +3,27 @@ import sys
 import logging
 
 
-def init_logging(debug=False):  # Logging function
+# Logging function
+def init_logging(debug=False):
     format_str = "%(levelname)s %(asctime)s - %(message)s"
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(format=format_str, level=level)
 
 
+# Remove file at path location
+def remove_file(path):
+    try:
+        os.remove(path)
+    except OSError as e:
+        print("Error: %s : %s" % (path, e.strerror))
+
+
+# Initialise logger
 init_logging()
 logger = logging.getLogger(__name__)
 
-current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent directory
+# Access the parent directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
@@ -30,4 +41,9 @@ if __name__ == "__main__":
         logger.info("Downloading the Schema-Guided-Dialogue dataset...")
         os.chdir(data_dir)  # Change the working directory
         os.system(f"git clone {git_url}")  # Execute the system command to clone the repository
+
+        remove_file("dstc8-schema-guided-dialogue/LICENSE.txt")
+        remove_file("dstc8-schema-guided-dialogue/README.md")
+        remove_file("dstc8-schema-guided-dialogue/dstc8.md")
+        remove_file("dstc8-schema-guided-dialogue/schema_guided_overview.png")
         logger.info("Download Complete!")
