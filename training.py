@@ -342,7 +342,63 @@ def response(sentence):
     attention_plot = attention_plot[:len(result.split(' ')), :len(sentence.split(' '))]
     plot_attention(attention_plot, sentence.split(' '), result.split(' '))
 
+    return result
 
+
+# Restoring the latest checkpoint in checkpoint_dir
+checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+
+# Example dialogue
+response('Can you give me the address of this restaurant')
+
+response('Do they have live music?')
+
+response('I would like to make a booking please')
+
+response('Where can I go to eat near me?')
+
+response('Where can I get some pizza?')
+
+
+# Create input values
+def load_test_dataset(path, num_examples=None):
+    inp_lang, resp_lang = create_dataset(path, num_examples)
+
+    input_tensor, inp_lang_tokenizer = tokenize(inp_lang)
+
+    return input_tensor, inp_lang_tokenizer
+
+
+testing_dataset = current_dir + "/processed_data/test/all_testing_dialogue.txt"  # Defining the testing directory
+
+# Add the testing dialogue to the vocab library
+input_tensor, inp_lang = load_test_dataset(testing_dataset, 30000)
+
+# Open the testing dialogue and split at new line
+testing_dialogue = open("processed_data/test/all_testing_dialogue.txt")
+file_contents = testing_dialogue.read()
+contents_split = file_contents.splitlines(True)
+
+# Reform as string and split at each delimiter
+str1 = ''.join(contents_split)
+words = re.split('[\t\n]', str1)  # Tab and new line delimiters
+
+test_inp = words[::2]  # Extract individual testing sentences for pairs
+
+# Pass each sentence to response function and add output to new empty list
+empty_list = []
+for x in test_inp:
+    result = response(x)
+    empty_list.extend(x)
+    empty_list.extend(result)
+
+## DONT KNOW IF WORKS CRASHED WHEN RUNNING
+# Save input and predicted response to new file
+with open("machine_translated.txt", "w") as output:
+    output.write(str(empty_list))
+
+
+# Allow the user to input dialogue
 def user_input():
     while True:
         try:
@@ -354,24 +410,4 @@ def user_input():
             response(sentence)
 
 
-# restoring the latest checkpoint in checkpoint_dir
-checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
-
-# Response asking the question
-# response(u'Do you have a specific which you want the eating place to be located at?')
-
-# Test dialogue
-response('Can you give me the address of this restaurant')
-
-response('Do they have live music?')
-
-response('I would like to make a booking please')
-
-response('Where can I go to eat near me?')
-
-response('Where can I get some pizza?')
-
 user_input()
-
-# ERROR HERE AS 'created' isn't in word_index
-# response('Your reservation was created. Thank you.')
