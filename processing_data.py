@@ -100,6 +100,41 @@ def extract_utterance(inp_dir, out_dir):
     logger.info("Processing Complete!")
 
 
+def testing_extract_utterance(inp_dir, out_dir):
+    all_dialogs = []  # List array for final extracted dialogs
+
+    for file_name in tqdm.tqdm(os.listdir(inp_dir),
+                               desc='Extracting testing utterances'):  # Display progress bar during loop
+
+        if 'schema.json' in file_name:
+            continue
+
+        file_path = os.path.join(inp_dir, file_name)
+
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        temp_dialogs = []
+        for dialogue in data:
+            if domain_option in dialogue['services']:
+                for item in dialogue['turns']:
+                    utterance = [item['utterance']]  # Extract the system and user speech
+                    temp_dialogs.extend(utterance)
+        all_dialogs.extend(temp_dialogs)  # Add all elements of new dialogue to overall list
+
+    all_dialogs.pop(0)  # Removes the first value to allow iteration to start at the second
+    test_inp = all_dialogs[::2]  # Extract individual testing sentences from pairs
+
+    # File Saving
+    file_path = Path(current_dir, out_dir)
+    logger.info(f"Saving Schema dialogue data to {file_path}")
+
+    with open(file_path, mode='wt', encoding='utf-8') as myfile:
+        myfile.write('\n'.join(test_inp))
+
+    logger.info("Processing Complete!")
+
+
 # Initialise logger
 init_logging()
 logger = logging.getLogger(__name__)
@@ -112,15 +147,18 @@ sys.path.insert(0, parent_dir)
 # Unprocessed train + test directories
 train_dir = "raw_data/dstc8-schema-guided-dialogue/train"
 test_dir = "raw_data/dstc8-schema-guided-dialogue/test"
+test_dir2 = "raw_data/dstc8-schema-guided-dialogue/test"
 
 # Processed train + test directories
 output_train_dir = "processed_data/train/all_training_dialogue.txt"
 output_test_dir = "processed_data/test/all_testing_dialogue.txt"
+output_test_dir2 = "processed_data/BLEU/human_translated_dialogue.txt"
 
 if __name__ == "__main__":
     # Create processed_data folders for all final dialogues
     new_train_dir = Path(current_dir, "processed_data/train")
     new_test_dir = Path(current_dir, "processed_data/test")
+    new_test_dir2 = Path(current_dir, "processed_data/BLEU")
     try:
         os.makedirs(new_train_dir)
     except OSError:
@@ -133,10 +171,17 @@ if __name__ == "__main__":
         logger.info("Creation of the directory '%s' failed. It may already exist." % new_test_dir)
     else:
         logger.info("Successfully created the directory '%s'!" % new_test_dir)
+    try:
+        os.makedirs(new_test_dir2)
+    except OSError:
+        logger.info("Creation of the directory '%s' failed. It may already exist." % new_test_dir2)
+    else:
+        logger.info("Successfully created the directory '%s'!" % new_test_dir2)
 
     # Gather user chosen domain
     domain_option = domain_choice()
 
     # Extract training + testing utterances
     extract_utterance(train_dir, output_train_dir)
-    extract_utterance(test_dir, output_test_dir)
+    extract_utterance(test_dir, output_test_dir)  # Needed to add to vocab library
+    testing_extract_utterance(test_dir2, output_test_dir2)
