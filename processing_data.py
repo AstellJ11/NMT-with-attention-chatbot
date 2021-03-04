@@ -9,6 +9,7 @@ import tqdm as tqdm
 from pick import pick
 
 
+# Allow the user to choose a domain
 def domain_choice():
     all_domains = []  # List array for domain names (including duplicates)
     unique_list = []  # List array to find unique domain names
@@ -42,10 +43,14 @@ def domain_choice():
     # Convert list of list to flat base list
     flat_list = [item for sublist in unique_list for item in sublist]
 
+    # Remove "_1" etc. from all domains, to ensure the entire domain is selected
+    flat_list = [s.replace("_", "").replace("1", "").replace("2", "").replace("3", "").replace("4", "")
+                 for s in flat_list]
+
     # Duplicates can still exist within list, final check and pass to domain_names
-    for item in flat_list:
-        if item not in domain_names:
-            domain_names.append(item)
+    for name in flat_list:
+        if name not in domain_names:
+            domain_names.append(name)
 
     # Allow the user to choose the domain being trained
     domain_question = 'Please choose a domain from the list you wish to talk about:  '
@@ -54,6 +59,7 @@ def domain_choice():
     return domain_option
 
 
+# Extract every utterance for chosen domain
 def extract_utterance(inp_dir, out_dir):
     all_dialogs = []  # List array for final extracted dialogs
 
@@ -68,8 +74,10 @@ def extract_utterance(inp_dir, out_dir):
             data = json.load(f)
 
         temp_dialogs = []
+
         for dialogue in data:
-            if domain_option in dialogue['services']:
+            substring_in_domain = any(domain_option in string for string in dialogue['services'])
+            if substring_in_domain == True:
                 for item in dialogue['turns']:
                     utterance = [item['utterance']]  # Extract the system and user speech
                     temp_dialogs.extend(utterance)
@@ -99,6 +107,7 @@ def extract_utterance(inp_dir, out_dir):
     logger.info("Processing Complete!")
 
 
+# Extract raw testing utterances for BLEU metric
 def testing_translated_utterance(inp_dir, out_dir):
     all_dialogs = []  # List array for final extracted dialogs
 
@@ -115,7 +124,8 @@ def testing_translated_utterance(inp_dir, out_dir):
 
         temp_dialogs = []
         for dialogue in data:
-            if domain_option in dialogue['services']:
+            substring_in_domain = any(domain_option in string for string in dialogue['services'])
+            if substring_in_domain == True:
                 for item in dialogue['turns']:
                     utterance = [item['utterance']]  # Extract the system and user speech
                     temp_dialogs.extend(utterance)
@@ -134,6 +144,7 @@ def testing_translated_utterance(inp_dir, out_dir):
     logger.info("Processing Complete!")
 
 
+# Extract just input dialogue for testing purposes
 def testing_input_utterance(inp_dir, out_dir):
     all_dialogs = []  # List array for final extracted dialogs
 
@@ -150,7 +161,8 @@ def testing_input_utterance(inp_dir, out_dir):
 
         temp_dialogs = []
         for dialogue in data:
-            if domain_option in dialogue['services']:
+            substring_in_domain = any(domain_option in string for string in dialogue['services'])
+            if substring_in_domain == True:
                 for item in dialogue['turns']:
                     utterance = [item['utterance']]  # Extract the system and user speech
                     temp_dialogs.extend(utterance)
