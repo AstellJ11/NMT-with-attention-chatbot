@@ -88,7 +88,7 @@ def load_dataset(path, num_examples=None):
     return input_tensor, response_tensor, inp_maxlen, resp_maxlen
 
 
-num_examples = 10000  # CHANGEABLE (Size of data loaded)
+num_examples = 5000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
 
@@ -379,7 +379,7 @@ checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
 # Stop training timer
 training_elapsed = timeit.default_timer() - training_start_time
-print("Time taken training:", training_elapsed, "sec")
+print("Time taken training:", round(training_elapsed), "sec")
 
 # ******************************************* MODEL TESTING *******************************************
 testing_start_time = timeit.default_timer()  # Start testing timer
@@ -405,6 +405,7 @@ new_string = ''
 for x in content:
     result = response(x)
     new_string = ('{}'.format(result))
+    new_string = new_string.replace('<end>', '')
     empty_list.append(new_string)
 
 # File Saving
@@ -418,7 +419,8 @@ logger.info("Saving Complete!")
 
 # Stop testing timer
 testing_elapsed = timeit.default_timer() - testing_start_time
-print("Time taken testing:", testing_elapsed, "sec")
+print("\nTime taken training:", round(training_elapsed), "sec")
+print("Time taken testing:", round(testing_elapsed), "sec")
 
 ## BROKEN AS USER INPUTS NEED TO BE ADDED TO VOCAB LIBRARY (OPTIONAL ANYWAY)
 # def user_response(sentence):
