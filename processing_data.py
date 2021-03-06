@@ -180,6 +180,16 @@ def testing_input_utterance(inp_dir, out_dir):
     logger.info("Processing Complete!")
 
 
+# output_train_dir + output_test_dir
+def all_utterance(out_dir):
+    filenames = ["processed_data/train/all_training_dialogue.txt", "processed_data/test/all_testing_dialogue.txt"]
+    with open(out_dir, 'w') as outfile:
+        for fname in filenames:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+
+
 # Initialise logger
 init_logging()
 logger = logging.getLogger(__name__)
@@ -198,6 +208,7 @@ output_train_dir = "processed_data/train/all_training_dialogue.txt"
 output_test_dir = "processed_data/test/all_testing_dialogue.txt"
 output_test_dir2 = "processed_data/BLEU/human_translated_dialogue.txt"
 output_test_dir3 = "processed_data/test/input_testing_dialogue.txt"
+output_all_dir = "processed_data/train/all_dialogue.txt"
 
 if __name__ == "__main__":
     # Create processed_data folders for all final dialogues
@@ -230,4 +241,5 @@ if __name__ == "__main__":
     extract_utterance(train_dir, output_train_dir)
     extract_utterance(test_dir, output_test_dir)  # Needed to add to vocab library
     testing_translated_utterance(test_dir, output_test_dir2)  # Human translated response for BLEU score
-    testing_input_utterance(test_dir, output_test_dir3)
+    testing_input_utterance(test_dir, output_test_dir3)  # Pure testing data to be evaluated
+    all_utterance(output_all_dir)  # All dialogue that will exist for the initial tokenizer

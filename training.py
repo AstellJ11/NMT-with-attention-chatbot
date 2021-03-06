@@ -23,7 +23,8 @@ sys.path.insert(0, parent_dir)
 
 training_start_time = timeit.default_timer()  # Start training timer
 
-path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"
+all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
+path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
 
 
 # Clean the sentences by removing punctuation and add tags at start and end of sentence
@@ -51,35 +52,50 @@ def create_dataset(path, num_examples):
     return zip(*word_pairs)
 
 
-# Tokenise word pairs
+# Create a temp dataset for all the dialogue
+def all_dataset(path):
+    lines = io.open(path, encoding='UTF-8').read().strip().split('\n')
+
+    sentences = [preprocess_sentence(l) for l in lines]
+
+    return sentences
+
+
+all_lang = all_dataset(all_data)  # Temp dataset for entire dataset
+
+# Create the tokenizer for all dialogue
+lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='', oov_token='<UNK>')
+lang_tokenizer.fit_on_texts(all_lang)
+
+
+# Tokenize word pairs
 def tokenize(lang):
-    lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='')
-    lang_tokenizer.fit_on_texts(lang)
+    tensor_sequence = lang_tokenizer.texts_to_sequences(lang)
+    maxlen = max([len(x) for x in tensor_sequence])
+    tensor = tf.keras.preprocessing.sequence.pad_sequences(tensor_sequence, padding='post', truncating='post',
+                                                           maxlen=maxlen)
 
-    tensor = lang_tokenizer.texts_to_sequences(lang)
-    tensor = tf.keras.preprocessing.sequence.pad_sequences(tensor, padding='post')
-
-    return tensor, lang_tokenizer
+    return tensor, maxlen
 
 
 # Create input, output pairs
 def load_dataset(path, num_examples=None):
     inp_lang, resp_lang = create_dataset(path, num_examples)
 
-    input_tensor, inp_lang_tokenizer = tokenize(inp_lang)
-    response_tensor, resp_lang_tokenizer = tokenize(resp_lang)
+    input_tensor, inp_maxlen = tokenize(inp_lang)
+    response_tensor, resp_maxlen = tokenize(resp_lang)
 
-    return input_tensor, response_tensor, inp_lang_tokenizer, resp_lang_tokenizer
+    return input_tensor, response_tensor, inp_maxlen, resp_maxlen
 
 
-num_examples = 30000  # CHANGEABLE (Size of data loaded)
+num_examples = 10000  # CHANGEABLE (Size of data loaded)
 
-input_tensor, response_tensor, inp_lang, resp_lang = load_dataset(path_to_file, num_examples)
+input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
 
 # Calculate max_length of the target tensors for future use
 max_length_inp, max_length_resp = response_tensor.shape[1], input_tensor.shape[1]
 
-# Create training set # TO DO: Create testing set here as well
+# Rename training set (Already the training data)
 input_tensor_train, response_tensor_train = (input_tensor, response_tensor)
 
 print(len(input_tensor_train), len(response_tensor_train))  # Length of each set
@@ -88,10 +104,10 @@ print(len(input_tensor_train), len(response_tensor_train))  # Length of each set
 BUFFER_SIZE = len(input_tensor_train)
 BATCH_SIZE = 64  # CHANGEABLE (32 or 64)
 steps_per_epoch = len(input_tensor_train) // BATCH_SIZE
-embedding_dim = 256
+embedding_dim = 256  # Can vary
 units = 512  # CHANGEABLE (512 or 1024)
-vocab_inp_size = len(inp_lang.word_index) + 1
-vocab_tar_size = len(resp_lang.word_index) + 1
+vocab_inp_size = len(lang_tokenizer.word_index) + 1
+vocab_tar_size = len(lang_tokenizer.word_index) + 1
 
 # Create the tf.data dateset and shuffle
 dataset = tf.data.Dataset.from_tensor_slices((input_tensor_train, response_tensor_train)).shuffle(BUFFER_SIZE)
@@ -124,7 +140,7 @@ class Encoder(tf.keras.Model):
 
 encoder = Encoder(vocab_inp_size, embedding_dim, units, BATCH_SIZE)
 
-# sample input
+# Sample input
 sample_hidden = encoder.initialize_hidden_state()
 sample_output, sample_hidden = encoder(example_input_batch, sample_hidden)
 print('Encoder output shape: (batch size, sequence length, units) {}'.format(sample_output.shape))
@@ -159,6 +175,13 @@ class BahdanauAttention(tf.keras.layers.Layer):
         context_vector = tf.reduce_sum(context_vector, axis=1)
 
         return context_vector, attention_weights
+
+
+attention_layer = BahdanauAttention(10)
+attention_result, attention_weights = attention_layer(sample_hidden, sample_output)
+
+print("Attention result shape: (batch size, units) {}".format(attention_result.shape))
+print("Attention weights shape: (batch_size, sequence_length, 1) {}".format(attention_weights.shape))
 
 
 class Decoder(tf.keras.Model):
@@ -236,7 +259,7 @@ def train_step(inp, targ, enc_hidden):
 
         dec_hidden = enc_hidden
 
-        dec_input = tf.expand_dims([resp_lang.word_index['<start>']] * BATCH_SIZE, 1)
+        dec_input = tf.expand_dims([lang_tokenizer.word_index['<start>']] * BATCH_SIZE, 1)
 
         # Teacher forcing - feeding the target as the next input
         for t in range(1, targ.shape[1]):
@@ -289,7 +312,7 @@ def evaluate(sentence):
 
     sentence = preprocess_sentence(sentence)
 
-    inputs = [inp_lang.word_index[i] for i in sentence.split(' ')]
+    inputs = [lang_tokenizer.word_index[i] for i in sentence.split(' ')]
     inputs = tf.keras.preprocessing.sequence.pad_sequences([inputs],
                                                            maxlen=max_length_inp,
                                                            padding='post')
@@ -301,7 +324,7 @@ def evaluate(sentence):
     enc_out, enc_hidden = encoder(inputs, hidden)
 
     dec_hidden = enc_hidden
-    dec_input = tf.expand_dims([resp_lang.word_index['<start>']], 0)
+    dec_input = tf.expand_dims([lang_tokenizer.word_index['<start>']], 0)
 
     for t in range(max_length_resp):
         predictions, dec_hidden, attention_weights = decoder(dec_input,
@@ -314,9 +337,9 @@ def evaluate(sentence):
 
         predicted_id = tf.argmax(predictions[0]).numpy()
 
-        result += resp_lang.index_word[predicted_id] + ' '
+        result += lang_tokenizer.index_word[predicted_id] + ' '
 
-        if resp_lang.index_word[predicted_id] == '<end>':
+        if lang_tokenizer.index_word[predicted_id] == '<end>':
             return result, sentence, attention_plot
 
         # the predicted ID is fed back into the model
@@ -361,20 +384,15 @@ print("Time taken training:", training_elapsed, "sec")
 # ******************************************* MODEL TESTING *******************************************
 testing_start_time = timeit.default_timer()  # Start testing timer
 
-
-# Create input values
-def load_test_dataset(path, num_examples=None):
-    inp_lang, resp_lang = create_dataset(path, num_examples)
-
-    input_tensor, inp_lang_tokenizer = tokenize(inp_lang)
-
-    return input_tensor, inp_lang_tokenizer
-
-
 testing_dataset = current_dir + "/processed_data/test/all_testing_dialogue.txt"  # Defining the testing directory
 
-# Add the testing dialogue to the vocab library
-input_tensor, inp_lang = load_test_dataset(testing_dataset, 30000)
+# Create dataset for the testing data
+test_inp_lang, test_resp_lang = create_dataset(testing_dataset, 50000)
+
+# Tokenize the testing data using the same tokenizer to facilitate simpatico
+test_sequences = lang_tokenizer.texts_to_sequences(test_inp_lang)
+test_tensor = tf.keras.preprocessing.sequence.pad_sequences(test_sequences, padding='post', truncating='post',
+                                                            maxlen=inp_maxlen)
 
 # Open the testing dialogue and split at new line
 with open("processed_data/test/input_testing_dialogue.txt") as f:
