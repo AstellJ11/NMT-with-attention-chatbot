@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import tensorflow as tf
 import timeit
+import tqdm as tqdm
 
 # Initialise logger
 init_logging()
@@ -88,7 +89,7 @@ def load_dataset(path, num_examples=None):
     return input_tensor, response_tensor, inp_maxlen, resp_maxlen
 
 
-num_examples = 5000  # CHANGEABLE (Size of data loaded)
+num_examples = 1000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
 
@@ -368,8 +369,8 @@ def plot_attention(attention, sentence, predicted_sentence):
 def response(sentence):
     result, sentence, attention_plot = evaluate(sentence)
 
-    print('Input: %s' % (sentence))
-    print('Predicted response: {}'.format(result))
+    # print('Input: %s' % (sentence))
+    # print('Predicted response: {}'.format(result))
 
     return result
 
@@ -379,7 +380,6 @@ checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
 # Stop training timer
 training_elapsed = timeit.default_timer() - training_start_time
-print("Time taken training:", round(training_elapsed), "sec")
 
 # ******************************************* MODEL TESTING *******************************************
 testing_start_time = timeit.default_timer()  # Start testing timer
@@ -389,11 +389,6 @@ testing_dataset = current_dir + "/processed_data/test/all_testing_dialogue.txt" 
 # Create dataset for the testing data
 test_inp_lang, test_resp_lang = create_dataset(testing_dataset, 50000)
 
-# Tokenize the testing data using the same tokenizer to facilitate simpatico
-test_sequences = lang_tokenizer.texts_to_sequences(test_inp_lang)
-test_tensor = tf.keras.preprocessing.sequence.pad_sequences(test_sequences, padding='post', truncating='post',
-                                                            maxlen=inp_maxlen)
-
 # Open the testing dialogue and split at new line
 with open("processed_data/test/input_testing_dialogue.txt") as f:
     content = f.readlines()
@@ -402,7 +397,7 @@ content = [x.strip() for x in content]  # Remove \n characters
 # Pass each sentence to response function and add output to new empty list
 empty_list = []
 new_string = ''
-for x in content:
+for x in tqdm.tqdm(content, desc='Generating responses based on testing data:'):
     result = response(x)
     new_string = ('{}'.format(result))
     new_string = new_string.replace('<end>', '')
