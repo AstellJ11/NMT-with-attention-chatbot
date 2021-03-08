@@ -190,6 +190,63 @@ def all_utterance(out_dir):
                     outfile.write(line)
 
 
+def slotted_utterance(inp_dir, out_dir):
+    all_dialogs = []  # List array for final extracted dialogs
+
+    for file_name in tqdm.tqdm(os.listdir(inp_dir), desc='Extracting utterances'):  # Display progress bar during loop
+
+        if 'schema.json' in file_name:
+            continue
+
+        file_path = os.path.join(inp_dir, file_name)
+
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        temp_dialogs = []
+
+        for dialogue in data:
+            # Check selected domain substring against string values
+            substring_in_domain = any(domain_option in string for string in dialogue['services'])
+            if substring_in_domain == True:
+                for item in dialogue['turns']:
+                    utterance = item['utterance']  # Extract the system and user speech
+                    for item2 in item['frames']:
+                        for item3 in item2['actions']:
+                            canonical_value = item3['values']  # Extract canonical values
+                            slot_value = '$' + item3['slot']  # Extract replacement slot values
+
+                            # Replace each canonical value with its respected slot value
+                            for i in canonical_value:
+                                utterance = utterance.replace(i, slot_value)
+
+                    temp_dialogs.append(utterance)
+        all_dialogs.extend(temp_dialogs)
+
+    # Process data into required format: I \t R \n I \t R...
+    deli = "\n"  # Initialising delimiter
+    temp_string = list(map(str, all_dialogs))  # Convert each list element to a string
+
+    res = deli.join(temp_string)  # Add each individual utterance to a new line
+
+    lines = res.splitlines()  # Split on new line
+
+    # For every utterance create a tab break, for every other utterance create a new line
+    processed = ''
+    step_size = 2
+    for i in range(0, len(lines), step_size):
+        processed += '\t'.join(lines[i:i + step_size]) + '\n'
+
+    # File Saving
+    file_path = Path(current_dir, out_dir)
+    logger.info(f"Saving Schema dialogue data to {file_path}")
+
+    save_path = open(out_dir, "w")
+    n = save_path.write(str(processed))
+    save_path.close()
+    logger.info("Processing Complete!")
+
+
 # Initialise logger
 init_logging()
 logger = logging.getLogger(__name__)
@@ -209,6 +266,7 @@ output_test_dir = "processed_data/test/all_testing_dialogue.txt"
 output_test_dir2 = "processed_data/BLEU/human_translated_dialogue.txt"
 output_test_dir3 = "processed_data/test/input_testing_dialogue.txt"
 output_all_dir = "processed_data/train/all_dialogue.txt"
+output_context_dir = "processed_data/train/increased_context_training_dialogue.txt"
 
 if __name__ == "__main__":
     # Create processed_data folders for all final dialogues
@@ -239,7 +297,16 @@ if __name__ == "__main__":
 
     # Extract training + testing utterances
     extract_utterance(train_dir, output_train_dir)
-    extract_utterance(test_dir, output_test_dir)  # Needed to add to vocab library
+    extract_utterance(test_dir, output_test_dir)
+
+    # Data for BLEU score
     testing_translated_utterance(test_dir, output_test_dir2)  # Human translated response for BLEU score
     testing_input_utterance(test_dir, output_test_dir3)  # Pure testing data to be evaluated
-    all_utterance(output_all_dir)  # All dialogue that will exist for the initial tokenizer
+
+    # Data for tokenizer
+    all_utterance(output_all_dir)
+
+    # Data without slot values
+    slotted_utterance(train_dir, output_train_dir)
+
+    # increased_context_utterance(train_dir ,output_context_dir)
