@@ -36,8 +36,8 @@ def preprocess_sentence(w):
     w = re.sub(r"([?.!,¿])", r" \1 ", w)
     w = re.sub(r'[" "]+', " ", w)
 
-    # Replace everything with space except (a-z, A-Z, ".", "?", "!", ",", all numbers, "-")
-    w = re.sub(r"[^a-zA-Z?.!,¿0123456789-]+", " ", w)
+    # Replace everything with space except (a-z, A-Z, ".", "?", "!", ",", all numbers, "-" and "$" for the slotted values)
+    w = re.sub(r"[^a-zA-Z?.!,¿$0123456789-]+", " ", w)
     w = w.strip()
 
     w = '<start> ' + w + ' <end>'  # Start and end token added to each sentence
@@ -383,11 +383,6 @@ training_elapsed = timeit.default_timer() - training_start_time
 
 # ******************************************* MODEL TESTING *******************************************
 testing_start_time = timeit.default_timer()  # Start testing timer
-
-testing_dataset = current_dir + "/processed_data/test/all_testing_dialogue.txt"  # Defining the testing directory
-
-# Create dataset for the testing data
-test_inp_lang, test_resp_lang = create_dataset(testing_dataset, 50000)
 
 # Open the testing dialogue and split at new line
 with open("processed_data/test/input_testing_dialogue.txt") as f:

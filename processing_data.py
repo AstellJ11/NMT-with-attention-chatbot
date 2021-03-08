@@ -16,7 +16,7 @@ def domain_choice():
     domain_names = []  # Final list array for all unique domains
 
     # Gather list of domains from dataset
-    for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Gathering domains'):  # Display progress bar during loop
+    for file_name in tqdm.tqdm(os.listdir(train_dir), desc='Preparing dataset'):  # Display progress bar during loop
 
         if 'schema.json' in file_name:
             continue
@@ -190,6 +190,7 @@ def all_utterance(out_dir):
                     outfile.write(line)
 
 
+# Extract all utterances with slotted values replaced
 def slotted_utterance(inp_dir, out_dir):
     all_dialogs = []  # List array for final extracted dialogs
 
@@ -247,6 +248,97 @@ def slotted_utterance(inp_dir, out_dir):
     logger.info("Processing Complete!")
 
 
+def slotted_testing_translated_utterance(inp_dir, out_dir):
+    all_dialogs = []  # List array for final extracted dialogs
+
+    for file_name in tqdm.tqdm(os.listdir(inp_dir),
+                               desc='Extracting testing utterances'):  # Display progress bar during loop
+
+        if 'schema.json' in file_name:
+            continue
+
+        file_path = os.path.join(inp_dir, file_name)
+
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        temp_dialogs = []
+        for dialogue in data:
+            # Check selected domain substring against string values
+            substring_in_domain = any(domain_option in string for string in dialogue['services'])
+            if substring_in_domain == True:
+                for item in dialogue['turns']:
+                    utterance = item['utterance']  # Extract the system and user speech
+                    for item2 in item['frames']:
+                        for item3 in item2['actions']:
+                            canonical_value = item3['values']  # Extract canonical values
+                            slot_value = '$' + item3['slot']  # Extract replacement slot values
+
+                            # Replace each canonical value with its respected slot value
+                            for i in canonical_value:
+                                utterance = utterance.replace(i, slot_value)
+
+                    temp_dialogs.append(utterance)
+        all_dialogs.extend(temp_dialogs)
+
+    all_dialogs.pop(0)  # Removes the first value to allow iteration to start at the second
+    test_inp = all_dialogs[::2]  # Extract individual testing sentences from pairs
+
+    # File Saving
+    file_path = Path(current_dir, out_dir)
+    logger.info(f"Saving Schema dialogue data to {file_path}")
+
+    with open(file_path, mode='wt', encoding='utf-8') as myfile:
+        myfile.write('\n'.join(test_inp))
+
+    logger.info("Processing Complete!")
+
+
+def slotted_testing_input_utterance(inp_dir, out_dir):
+    all_dialogs = []  # List array for final extracted dialogs
+
+    for file_name in tqdm.tqdm(os.listdir(inp_dir),
+                               desc='Extracting testing utterances'):  # Display progress bar during loop
+
+        if 'schema.json' in file_name:
+            continue
+
+        file_path = os.path.join(inp_dir, file_name)
+
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        temp_dialogs = []
+        for dialogue in data:
+            # Check selected domain substring against string values
+            substring_in_domain = any(domain_option in string for string in dialogue['services'])
+            if substring_in_domain == True:
+                for item in dialogue['turns']:
+                    utterance = item['utterance']  # Extract the system and user speech
+                    for item2 in item['frames']:
+                        for item3 in item2['actions']:
+                            canonical_value = item3['values']  # Extract canonical values
+                            slot_value = '$' + item3['slot']  # Extract replacement slot values
+
+                            # Replace each canonical value with its respected slot value
+                            for i in canonical_value:
+                                utterance = utterance.replace(i, slot_value)
+
+                    temp_dialogs.append(utterance)
+        all_dialogs.extend(temp_dialogs)
+
+    test_inp = all_dialogs[::2]  # Extract individual testing sentences from pairs
+
+    # File Saving
+    file_path = Path(current_dir, out_dir)
+    logger.info(f"Saving Schema dialogue data to {file_path}")
+
+    with open(file_path, mode='wt', encoding='utf-8') as myfile:
+        myfile.write('\n'.join(test_inp))
+
+    logger.info("Processing Complete!")
+
+
 # Initialise logger
 init_logging()
 logger = logging.getLogger(__name__)
@@ -295,18 +387,33 @@ if __name__ == "__main__":
     # Gather user chosen domain
     domain_option = domain_choice()
 
-    # Extract training + testing utterances
-    extract_utterance(train_dir, output_train_dir)
-    extract_utterance(test_dir, output_test_dir)
+    # Allow the user to choose the domain being trained
+    slot_question = 'Would you like to train on the default dataset or a dataset with replaced slotted values?  '
+    slot_answers = ['Default Dataset', 'Slotted Dataset']
+    slot_option, index = pick(slot_answers, slot_question)
 
-    # Data for BLEU score
-    testing_translated_utterance(test_dir, output_test_dir2)  # Human translated response for BLEU score
-    testing_input_utterance(test_dir, output_test_dir3)  # Pure testing data to be evaluated
+    if index == 0:
+        # Extract training + testing utterances
+        extract_utterance(train_dir, output_train_dir)
+        extract_utterance(test_dir, output_test_dir)
 
-    # Data for tokenizer
-    all_utterance(output_all_dir)
+        # Data for BLEU score
+        testing_translated_utterance(test_dir, output_test_dir2)  # Human translated response for BLEU score
+        testing_input_utterance(test_dir, output_test_dir3)  # Pure testing data to be evaluated
 
-    # Data without slot values
-    slotted_utterance(train_dir, output_train_dir)
+        # Data for tokenizer
+        all_utterance(output_all_dir)
+
+    else:
+        # Data without slot values
+        slotted_utterance(train_dir, output_train_dir)
+        slotted_utterance(test_dir, output_test_dir)
+
+        # Data for BLEU score
+        slotted_testing_translated_utterance(test_dir, output_test_dir2)
+        slotted_testing_input_utterance(test_dir, output_test_dir3)
+
+        # Data for tokenizer
+        all_utterance(output_all_dir)
 
     # increased_context_utterance(train_dir ,output_context_dir)
