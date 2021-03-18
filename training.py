@@ -13,6 +13,7 @@ import matplotlib.ticker as ticker
 import tensorflow as tf
 import timeit
 import tqdm as tqdm
+from jiwer import wer
 
 # Initialise logger
 init_logging()
@@ -37,7 +38,7 @@ def preprocess_sentence(w):
     w = re.sub(r'[" "]+', " ", w)
 
     # Replace everything with space except (a-z, A-Z, ".", "?", "!", ",", all numbers, "-" and "$" for the slotted values)
-    w = re.sub(r"[^a-zA-Z?.!,¿$0123456789-]+", " ", w)
+    w = re.sub(r"[^a-zA-Z?.!,¿$_0123456789-]+", " ", w)
     w = w.strip()
 
     w = '<start> ' + w + ' <end>'  # Start and end token added to each sentence
@@ -89,7 +90,7 @@ def load_dataset(path, num_examples=None):
     return input_tensor, response_tensor, inp_maxlen, resp_maxlen
 
 
-num_examples = 1000  # CHANGEABLE (Size of data loaded)
+num_examples = 10000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
 
@@ -406,6 +407,19 @@ with open(file_path, mode='wt', encoding='utf-8') as myfile:
     myfile.write('\n'.join(empty_list))
 
 logger.info("Saving Complete!")
+
+def WER(gt_path, hypothesis_path):
+    GTlines = io.open(gt_path, encoding='UTF-8').read().strip().split('\n')
+    GTsentences = [preprocess_sentence(l) for l in GTlines]
+
+    error = wer(GTsentences, empty_list)
+    print("The word error rate is: ", error)
+
+    return error
+
+gt_path = current_dir + "/processed_data/BLEU/human_translated_dialogue.txt"
+hypothesis_path = current_dir + "/processed_data/BLEU/machine_translated_dialogue.txt"
+WER(gt_path, hypothesis_path)
 
 # Stop testing timer
 testing_elapsed = timeit.default_timer() - testing_start_time
