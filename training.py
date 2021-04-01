@@ -14,6 +14,9 @@ import tensorflow as tf
 import timeit
 import tqdm as tqdm
 from jiwer import wer
+from pick import pick
+import os.path
+from os import path
 
 # Initialise logger
 init_logging()
@@ -22,8 +25,6 @@ logger = logging.getLogger(__name__)
 current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent directory
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
-
-training_start_time = timeit.default_timer()  # Start training timer
 
 all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
 path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
@@ -284,29 +285,34 @@ def train_step(inp, targ, enc_hidden):
     return batch_loss
 
 
-EPOCHS = 10
+def train_model(EPOCHS):
+    training_start_time = timeit.default_timer()  # Start training timer
 
-for epoch in range(EPOCHS):
-    start = time.time()
+    for epoch in range(EPOCHS):
+        start = time.time()
 
-    enc_hidden = encoder.initialize_hidden_state()
-    total_loss = 0
+        enc_hidden = encoder.initialize_hidden_state()
+        total_loss = 0
 
-    for (batch, (inp, targ)) in enumerate(dataset.take(steps_per_epoch)):
-        batch_loss = train_step(inp, targ, enc_hidden)
-        total_loss += batch_loss
+        for (batch, (inp, targ)) in enumerate(dataset.take(steps_per_epoch)):
+            batch_loss = train_step(inp, targ, enc_hidden)
+            total_loss += batch_loss
 
-        if batch % 100 == 0:
-            print('Epoch {} Batch {} Loss {:.4f}'.format(epoch + 1,
-                                                         batch,
-                                                         batch_loss.numpy()))
-    # saving (checkpoint) the model every 2 epochs
-    if (epoch + 1) % 2 == 0:
-        checkpoint.save(file_prefix=checkpoint_prefix)
+            if batch % 100 == 0:
+                print('Epoch {} Batch {} Loss {:.4f}'.format(epoch + 1,
+                                                             batch,
+                                                             batch_loss.numpy()))
+        # saving (checkpoint) the model every 2 epochs
+        if (epoch + 1) % 2 == 0:
+            checkpoint.save(file_prefix=checkpoint_prefix)
 
-    print('Epoch {} Loss {:.4f}'.format(epoch + 1,
-                                        total_loss / steps_per_epoch))
-    print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+        print('Epoch {} Loss {:.4f}'.format(epoch + 1,
+                                            total_loss / steps_per_epoch))
+        print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+
+    # Stop training timer
+    training_elapsed = timeit.default_timer() - training_start_time
+    print("Time taken training:", round(training_elapsed), "sec")
 
 
 def evaluate(sentence):
@@ -377,54 +383,76 @@ def response(sentence):
 
 
 # Restoring the latest checkpoint in checkpoint_dir
-checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+# checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
-# Stop training timer
-training_elapsed = timeit.default_timer() - training_start_time
 
 # ******************************************* MODEL TESTING *******************************************
-testing_start_time = timeit.default_timer()  # Start testing timer
+def model_testing():
+    testing_start_time = timeit.default_timer()  # Start testing timer
 
-# Open the testing dialogue and split at new line
-with open("processed_data/test/input_testing_dialogue.txt") as f:
-    content = f.readlines()
-content = [x.strip() for x in content]  # Remove \n characters
+    # Open the testing dialogue and split at new line
+    with open("processed_data/test/input_testing_dialogue.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]  # Remove \n characters
 
-# Pass each sentence to response function and add output to new empty list
-empty_list = []
-new_string = ''
-for x in tqdm.tqdm(content, desc='Generating responses based on testing data:'):
-    result = response(x)
-    new_string = ('{}'.format(result))
-    new_string = new_string.replace('<end>', '')
-    empty_list.append(new_string)
+    # Pass each sentence to response function and add output to new empty list
+    empty_list = []
+    new_string = ''
+    for x in tqdm.tqdm(content, desc='Generating responses based on testing data:'):
+        result = response(x)
+        new_string = ('{}'.format(result))
+        new_string = new_string.replace('<end>', '')
+        empty_list.append(new_string)
 
-# File Saving
-file_path = "processed_data/BLEU/machine_translated_dialogue.txt"
-logger.info(f"Saving Schema dialogue data to {file_path}")
+    # File Saving
+    file_path = "processed_data/BLEU/machine_translated_dialogue.txt"
+    logger.info(f"Saving Schema dialogue data to {file_path}")
 
-with open(file_path, mode='wt', encoding='utf-8') as myfile:
-    myfile.write('\n'.join(empty_list))
+    with open(file_path, mode='wt', encoding='utf-8') as myfile:
+        myfile.write('\n'.join(empty_list))
 
-logger.info("Saving Complete!")
+    logger.info("Saving Complete!")
 
-def WER(gt_path, hypothesis_path):
-    GTlines = io.open(gt_path, encoding='UTF-8').read().strip().split('\n')
-    GTsentences = [preprocess_sentence(l) for l in GTlines]
+    gt_path = current_dir + "/processed_data/BLEU/human_translated_dialogue.txt"
+    hypothesis_path = current_dir + "/processed_data/BLEU/machine_translated_dialogue.txt"
 
-    error = wer(GTsentences, empty_list)
-    print("The word error rate is: ", error)
+    def WER(gt_path, hypothesis_path):
+        GTlines = io.open(gt_path, encoding='UTF-8').read().strip().split('\n')
+        GTsentences = [preprocess_sentence(l) for l in GTlines]
 
-    return error
+        error = wer(GTsentences, empty_list)
+        print("The word error rate is: ", error)
 
-gt_path = current_dir + "/processed_data/BLEU/human_translated_dialogue.txt"
-hypothesis_path = current_dir + "/processed_data/BLEU/machine_translated_dialogue.txt"
-WER(gt_path, hypothesis_path)
+        return error
 
-# Stop testing timer
-testing_elapsed = timeit.default_timer() - testing_start_time
-print("\nTime taken training:", round(training_elapsed), "sec")
-print("Time taken testing:", round(testing_elapsed), "sec")
+    # CURRENTLY CRASHES
+    # WER(gt_path, hypothesis_path)
+
+    # Stop testing timer
+    testing_elapsed = timeit.default_timer() - testing_start_time
+    print("Time taken testing:", round(testing_elapsed), "sec")
+
+
+# Allow the user to choose the domain being trained
+model_question = 'What action would you like to perform?  '
+model_answers = ['Train model', 'Evaluate model']
+model_option, index = pick(model_answers, model_question)
+
+if index == 0:
+    epoch_question = 'How many epochs to train? '
+    epoch_answer = [5, 10, 25, 50, 100]
+    epoch_option, index = pick(epoch_answer, epoch_question)
+
+    if path.exists(checkpoint_dir):
+        print("Removing previous checkpoints...\n")
+        for filename in os.listdir(checkpoint_dir):
+            os.remove(checkpoint_dir + "/" + filename)
+
+    train_model(epoch_option)
+
+if index == 1:
+    checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+    model_testing()
 
 ## BROKEN AS USER INPUTS NEED TO BE ADDED TO VOCAB LIBRARY (OPTIONAL ANYWAY)
 # def user_response(sentence):
