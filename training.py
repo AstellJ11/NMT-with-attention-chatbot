@@ -146,8 +146,8 @@ encoder = Encoder(vocab_inp_size, embedding_dim, units, BATCH_SIZE)
 # Sample input
 sample_hidden = encoder.initialize_hidden_state()
 sample_output, sample_hidden = encoder(example_input_batch, sample_hidden)
-print('Encoder output shape: (batch size, sequence length, units) {}'.format(sample_output.shape))
-print('Encoder Hidden state shape: (batch size, units) {}'.format(sample_hidden.shape))
+logger.info('Encoder output shape: (batch size, sequence length, units) {}'.format(sample_output.shape))
+logger.info('Encoder Hidden state shape: (batch size, units) {}'.format(sample_hidden.shape))
 
 
 class BahdanauAttention(tf.keras.layers.Layer):
@@ -183,8 +183,8 @@ class BahdanauAttention(tf.keras.layers.Layer):
 attention_layer = BahdanauAttention(10)
 attention_result, attention_weights = attention_layer(sample_hidden, sample_output)
 
-print("Attention result shape: (batch size, units) {}".format(attention_result.shape))
-print("Attention weights shape: (batch_size, sequence_length, 1) {}".format(attention_weights.shape))
+logger.info("Attention result shape: (batch size, units) {}".format(attention_result.shape))
+logger.info("Attention weights shape: (batch_size, sequence_length, 1) {}".format(attention_weights.shape))
 
 
 class Decoder(tf.keras.Model):
@@ -229,7 +229,7 @@ decoder = Decoder(vocab_tar_size, embedding_dim, units, BATCH_SIZE)
 sample_decoder_output, _, _ = decoder(tf.random.uniform((BATCH_SIZE, 1)),
                                       sample_hidden, sample_output)
 
-print('Decoder output shape: (batch_size, vocab size) {}'.format(sample_decoder_output.shape))
+logger.info('Decoder output shape: (batch_size, vocab size) {}'.format(sample_decoder_output.shape))
 
 optimizer = tf.keras.optimizers.Adam()
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -312,7 +312,7 @@ def train_model(EPOCHS):
 
     # Stop training timer
     training_elapsed = timeit.default_timer() - training_start_time
-    print("Time taken training:", round(training_elapsed), "sec")
+    logger.info("Time taken training:", round(training_elapsed), "sec")
 
 
 def evaluate(sentence):
@@ -387,6 +387,20 @@ def response(sentence):
 
 
 # ******************************************* MODEL TESTING *******************************************
+# Calculates the word error rate using jiwer
+def WER(gt_path, hypothesis_path):
+    GTsentences = io.open(gt_path, encoding='UTF-8').read().strip().split('\n')
+
+    Hsentences = io.open(hypothesis_path, encoding='UTF-8').read().strip().split('\n')
+
+    error = wer(GTsentences, Hsentences)
+    logger.info("Calculating the word error rate...")
+    logger.info("The word error rate is: ", round((error) * 100, 2), "%", sep='')
+
+    return error
+
+
+# Main testing function
 def model_testing():
     testing_start_time = timeit.default_timer()  # Start testing timer
 
@@ -416,21 +430,12 @@ def model_testing():
     gt_path = current_dir + "/processed_data/BLEU/human_translated_dialogue.txt"
     hypothesis_path = current_dir + "/processed_data/BLEU/machine_translated_dialogue.txt"
 
-    def WER(gt_path, hypothesis_path):
-        GTlines = io.open(gt_path, encoding='UTF-8').read().strip().split('\n')
-        GTsentences = [preprocess_sentence(l) for l in GTlines]
-
-        error = wer(GTsentences, empty_list)
-        print("The word error rate is: ", error)
-
-        return error
-
-    # CURRENTLY CRASHES
-    # WER(gt_path, hypothesis_path)
+    # Calculating the word error rate
+    WER(gt_path, hypothesis_path)
 
     # Stop testing timer
     testing_elapsed = timeit.default_timer() - testing_start_time
-    print("Time taken testing:", round(testing_elapsed), "sec")
+    logger.info("Time taken testing:", round(testing_elapsed), "sec")
 
 
 # Allow the user to choose the domain being trained
@@ -444,7 +449,7 @@ if index == 0:
     epoch_option, index = pick(epoch_answer, epoch_question)
 
     if path.exists(checkpoint_dir):
-        print("Removing previous checkpoints...\n")
+        logger.info("Removing previous checkpoints...\n")
         for filename in os.listdir(checkpoint_dir):
             os.remove(checkpoint_dir + "/" + filename)
 
