@@ -6,6 +6,7 @@ import numpy as np
 import os
 import io
 import logging
+from pathlib import Path
 from downloading_data import init_logging
 import time
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ from jiwer import wer
 from pick import pick
 import os.path
 from os import path
+import concurrent.futures
 
 # Initialise logger
 init_logging()
@@ -26,9 +28,11 @@ current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent di
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
-path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
+all_data = current_dir + "/processed_data/candidate/all_data.txt"  # File path to all dialogue
+path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"  # File path to training dialogue
 
+
+# ******************************************* MODEL PRE-PROCESSING *******************************************
 
 # Clean the sentences by removing punctuation and add tags at start and end of sentence
 def preprocess_sentence(w):
@@ -55,7 +59,7 @@ def create_dataset(path, num_examples):
     return zip(*word_pairs)
 
 
-# Create a temp dataset for all the dialogue
+# Create a dataset for all the dialogue
 def all_dataset(path):
     lines = io.open(path, encoding='UTF-8').read().strip().split('\n')
 
@@ -91,6 +95,8 @@ def load_dataset(path, num_examples=None):
     return input_tensor, response_tensor, inp_maxlen, resp_maxlen
 
 
+# ******************************************* MODEL PARAMETERS *******************************************
+
 num_examples = 10000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
@@ -120,6 +126,8 @@ dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
 example_input_batch, example_target_batch = next(iter(dataset))
 print(example_input_batch.shape, example_target_batch.shape)
 
+
+# ******************************************* ENCODER / ATTENTION / DECODER *******************************************
 
 class Encoder(tf.keras.Model):
     def __init__(self, vocab_size, embedding_dim, enc_units, batch_sz):
@@ -253,6 +261,8 @@ checkpoint = tf.train.Checkpoint(optimizer=optimizer,
                                  decoder=decoder)
 
 
+# ******************************************* MODEL TRAINING *******************************************
+
 @tf.function
 def train_step(inp, targ, enc_hidden):
     loss = 0
@@ -312,9 +322,12 @@ def train_model(EPOCHS):
 
     # Stop training timer
     training_elapsed = timeit.default_timer() - training_start_time
-    logger.info("Time taken training:", round(training_elapsed), "sec")
+    print("Time taken training:", round(training_elapsed), "sec")
 
 
+# ******************************************* MODEL TESTING *******************************************
+
+# Main evaluate method
 def evaluate(sentence):
     attention_plot = np.zeros((max_length_resp, max_length_inp))
 
@@ -356,7 +369,7 @@ def evaluate(sentence):
     return result, sentence, attention_plot
 
 
-# function for plotting the attention weights
+# Plotting the attention weights
 def plot_attention(attention, sentence, predicted_sentence):
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(1, 1, 1)
@@ -373,6 +386,7 @@ def plot_attention(attention, sentence, predicted_sentence):
     plt.show()
 
 
+# Generate response using evaluate function
 def response(sentence):
     result, sentence, attention_plot = evaluate(sentence)
 
@@ -382,11 +396,6 @@ def response(sentence):
     return result
 
 
-# Restoring the latest checkpoint in checkpoint_dir
-# checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
-
-
-# ******************************************* MODEL TESTING *******************************************
 # Calculates the word error rate using jiwer
 def WER(gt_path, hypothesis_path):
     GTsentences = io.open(gt_path, encoding='UTF-8').read().strip().split('\n')
@@ -395,13 +404,13 @@ def WER(gt_path, hypothesis_path):
 
     error = wer(GTsentences, Hsentences)
     logger.info("Calculating the word error rate...")
-    logger.info("The word error rate is: ", round((error) * 100, 2), "%", sep='')
+    print("The word error rate is: ", round((error) * 100, 2), "%", sep='')
 
     return error
 
 
-# Main testing function
-def model_testing():
+# Main evaluation function
+def evaluate_model():
     testing_start_time = timeit.default_timer()  # Start testing timer
 
     # Open the testing dialogue and split at new line
@@ -420,7 +429,7 @@ def model_testing():
 
     # File Saving
     file_path = "processed_data/BLEU/machine_translated_dialogue.txt"
-    logger.info(f"Saving Schema dialogue data to {file_path}")
+    logger.info(f"Saving predicted response data to {file_path}")
 
     with open(file_path, mode='wt', encoding='utf-8') as myfile:
         myfile.write('\n'.join(empty_list))
@@ -435,12 +444,170 @@ def model_testing():
 
     # Stop testing timer
     testing_elapsed = timeit.default_timer() - testing_start_time
-    logger.info("Time taken testing:", round(testing_elapsed), "sec")
+    print("Time taken testing:", round(testing_elapsed), "sec")
 
+
+# ******************************************* CANDIDATE MODEL TESTING *******************************************
+
+# Main evaluate method
+def candidate_evaluate(sentence, candidate=None, id=None):
+    inputs = []
+    for word in sentence.split(' '):
+        if word in lang_tokenizer.word_index:
+            inputs.append(lang_tokenizer.word_index[word])
+
+    inputs = tf.keras.preprocessing.sequence.pad_sequences([inputs], maxlen=max_length_inp, padding='post')
+    inputs = tf.convert_to_tensor(inputs)
+
+    result = ''
+    value = 0
+
+    hidden = [tf.zeros((1, units))]
+    enc_out, enc_hidden = encoder(inputs, hidden)
+
+    dec_hidden = enc_hidden
+    dec_input = tf.expand_dims([lang_tokenizer.word_index['<start>']], 0)
+
+    candidate_words = []
+    if candidate != None:
+        candidate = candidate + " <end>"
+        for word in candidate.split(' '):
+            if word in lang_tokenizer.word_index:
+                candidate_words.append(lang_tokenizer.word_index[word])
+
+    for t in range(max_length_resp):
+        predictions, dec_hidden, attention_weights = decoder(dec_input, dec_hidden, enc_out)
+
+        if candidate == None:
+            predicted_id = tf.argmax(predictions[0]).numpy()
+        else:
+            predicted_id = candidate_words[t]
+
+        value += predictions[0][predicted_id].numpy()
+
+        if lang_tokenizer.index_word[predicted_id] == '<end>':
+            return result, value / t, id, sentence
+
+        result += lang_tokenizer.index_word[predicted_id] + ' '
+
+        # the predicted ID is fed back into the model
+        dec_input = tf.expand_dims([predicted_id], 0)
+
+    return result, value / t, id, sentence
+
+
+# Calculating rank value for performance metrics
+def getRankValue(target_value, unsorted_distribution):
+    sorted_distribution = sorted(unsorted_distribution, reverse=True)
+    for i in range(0, len(sorted_distribution)):
+        value = sorted_distribution[i]
+        if value == target_value:
+            return 1 / (i + 1)
+    return None
+
+
+# Read and pre-process candidate specific data
+def loadTestData(filename):
+    file = open(filename, mode='rt', encoding='utf-8')
+    text = file.read()
+    file.close()
+    lines = text.strip().split('\n')
+
+    allCandidates = []
+    candidates = []
+    contexts = []
+
+    for i in range(0, len(lines)):
+        if lines[i].startswith("CONTEXT:"):
+            candidate = lines[i][8:]
+            contexts.append(candidate)
+            continue
+
+        elif len(lines[i].strip()) == 0:
+            if i > 0: allCandidates.append(candidates)
+            candidates = []
+
+        else:
+            candidate = lines[i][12:]
+            candidates.append(candidate)
+
+    allCandidates.append(candidates)
+    return allCandidates, contexts
+
+
+# Main evaluation function
+def candidate_evaluate_model(filename_testdata):
+    testing_start_time = timeit.default_timer()  # Start testing timer
+
+    candidates, contexts = loadTestData(filename_testdata)
+    correct_predictions = 0
+    total_predictions = 0
+    cumulative_mrr = 0
+    recall_at_1 = None
+    mrr = None
+    ref_empty_list = []
+    resp_empty_list = []
+
+    for i in tqdm.tqdm(range(0, len(contexts)), desc='Evaluating model'):
+        total_predictions += 1
+        target_value = 0
+        context = contexts[i]
+        reference = candidates[i][0]
+        ref_empty_list.append(reference)
+        distribution = []
+        jobs = []
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            jobs.append(executor.submit(candidate_evaluate, context, None, 0))
+            for j in range(0, len(candidates[i])):
+                jobs.append(executor.submit(candidate_evaluate, context, candidates[i][j], (j + 1)))
+
+        for future in concurrent.futures.as_completed(jobs):
+            candidate_sentence, value_candidate, id, inp_sentence = future.result()
+            if id == 0:
+                response = candidate_sentence
+                resp_empty_list.append(response)
+            else:
+                distribution.append(value_candidate)
+
+            if id == 1: target_value = value_candidate
+
+        rank = getRankValue(target_value, distribution)
+        cumulative_mrr += rank
+        correct_predictions += 1 if rank == 1 else 0
+
+        recall_at_1 = correct_predictions / total_predictions
+        mrr = cumulative_mrr / total_predictions
+
+    print("RECALL@1=" + str(recall_at_1))
+    print("Mean Reciprocal Rank=" + str(mrr))
+
+    # File Saving
+    ref_file_path = "processed_data/BLEU/human_translated_dialogue.txt"
+    resp_file_path = "processed_data/BLEU/machine_translated_dialogue.txt"
+
+    logger.info(f"Saving reference dialogue data to {ref_file_path}")
+    with open(ref_file_path, mode='wt', encoding='utf-8') as ref_myfile:
+        ref_myfile.write('\n'.join(ref_empty_list))
+
+    logger.info("Saving Complete!")
+
+    logger.info(f"Saving response dialogue data to {resp_file_path}")
+    with open(resp_file_path, mode='wt', encoding='utf-8') as resp_myfile:
+        resp_myfile.write('\n'.join(resp_empty_list))
+
+    logger.info("Saving Complete!")
+
+    # Stop testing timer
+    testing_elapsed = timeit.default_timer() - testing_start_time
+    print("Time taken testing:", round(testing_elapsed), "sec")
+
+
+# ******************************************* MAIN *******************************************
 
 # Allow the user to choose the domain being trained
 model_question = 'What action would you like to perform?  '
-model_answers = ['Train model', 'Evaluate model']
+model_answers = ['Train model', 'Evaluate model', 'Evaluate candidate model']
 model_option, index = pick(model_answers, model_question)
 
 if index == 0:
@@ -457,31 +624,9 @@ if index == 0:
 
 if index == 1:
     checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
-    model_testing()
+    evaluate_model()
 
-## BROKEN AS USER INPUTS NEED TO BE ADDED TO VOCAB LIBRARY (OPTIONAL ANYWAY)
-# def user_response(sentence):
-#     result, sentence, attention_plot = evaluate(sentence)
-#
-#     print('Input: %s' % (sentence))
-#     print('Predicted response: {}'.format(result))
-#
-#     attention_plot = attention_plot[:len(result.split(' ')), :len(sentence.split(' '))]
-#     plot_attention(attention_plot, sentence.split(' '), result.split(' '))
-#
-#     return result
-#
-#
-# # Allow the user to input dialogue
-# def user_input():
-#     while True:
-#         try:
-#             sentence = (input("Type: "))
-#         except ValueError:
-#             print("Sorry, I didn't understand that.")
-#             continue
-#         else:
-#             user_response(sentence)
-#
-#
-# user_input()
+path_to_data_test = current_dir + "/processed_data/candidate/dstc8-test-candidates.txt"
+if index == 2:
+    checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+    candidate_evaluate_model(path_to_data_test)
