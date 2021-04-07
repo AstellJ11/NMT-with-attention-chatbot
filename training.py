@@ -28,9 +28,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))  # Access the parent di
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-all_data = current_dir + "/processed_data/candidate/all_data.txt"  # File path to all dialogue
-path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"  # File path to training dialogue
-
 
 # ******************************************* MODEL PRE-PROCESSING *******************************************
 
@@ -68,13 +65,6 @@ def all_dataset(path):
     return sentences
 
 
-all_lang = all_dataset(all_data)  # Temp dataset for entire dataset
-
-# Create the tokenizer for all dialogue
-lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='', oov_token='<UNK>')
-lang_tokenizer.fit_on_texts(all_lang)
-
-
 # Tokenize word pairs
 def tokenize(lang):
     tensor_sequence = lang_tokenizer.texts_to_sequences(lang)
@@ -93,38 +83,6 @@ def load_dataset(path, num_examples=None):
     response_tensor, resp_maxlen = tokenize(resp_lang)
 
     return input_tensor, response_tensor, inp_maxlen, resp_maxlen
-
-
-# ******************************************* MODEL PARAMETERS *******************************************
-
-num_examples = 10000  # CHANGEABLE (Size of data loaded)
-
-input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
-
-# Calculate max_length of the target tensors for future use
-max_length_inp, max_length_resp = response_tensor.shape[1], input_tensor.shape[1]
-
-# Rename training set (Already the training data)
-input_tensor_train, response_tensor_train = (input_tensor, response_tensor)
-
-print(len(input_tensor_train), len(response_tensor_train))  # Length of each set
-
-# Initialize the tf.data dataset variables
-BUFFER_SIZE = len(input_tensor_train)
-BATCH_SIZE = 64  # CHANGEABLE (32 or 64)
-steps_per_epoch = len(input_tensor_train) // BATCH_SIZE
-embedding_dim = 256  # Can vary
-units = 512  # CHANGEABLE (512 or 1024)
-vocab_inp_size = len(lang_tokenizer.word_index) + 1
-vocab_tar_size = len(lang_tokenizer.word_index) + 1
-
-# Create the tf.data dateset and shuffle
-dataset = tf.data.Dataset.from_tensor_slices((input_tensor_train, response_tensor_train)).shuffle(BUFFER_SIZE)
-dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
-
-# Show the TensorShape size
-example_input_batch, example_target_batch = next(iter(dataset))
-print(example_input_batch.shape, example_target_batch.shape)
 
 
 # ******************************************* ENCODER / ATTENTION / DECODER *******************************************
@@ -147,15 +105,6 @@ class Encoder(tf.keras.Model):
 
     def initialize_hidden_state(self):
         return tf.zeros((self.batch_sz, self.enc_units))
-
-
-encoder = Encoder(vocab_inp_size, embedding_dim, units, BATCH_SIZE)
-
-# Sample input
-sample_hidden = encoder.initialize_hidden_state()
-sample_output, sample_hidden = encoder(example_input_batch, sample_hidden)
-logger.info('Encoder output shape: (batch size, sequence length, units) {}'.format(sample_output.shape))
-logger.info('Encoder Hidden state shape: (batch size, units) {}'.format(sample_hidden.shape))
 
 
 class BahdanauAttention(tf.keras.layers.Layer):
@@ -186,13 +135,6 @@ class BahdanauAttention(tf.keras.layers.Layer):
         context_vector = tf.reduce_sum(context_vector, axis=1)
 
         return context_vector, attention_weights
-
-
-attention_layer = BahdanauAttention(10)
-attention_result, attention_weights = attention_layer(sample_hidden, sample_output)
-
-logger.info("Attention result shape: (batch size, units) {}".format(attention_result.shape))
-logger.info("Attention weights shape: (batch_size, sequence_length, 1) {}".format(attention_weights.shape))
 
 
 class Decoder(tf.keras.Model):
@@ -232,18 +174,6 @@ class Decoder(tf.keras.Model):
         return x, state, attention_weights
 
 
-decoder = Decoder(vocab_tar_size, embedding_dim, units, BATCH_SIZE)
-
-sample_decoder_output, _, _ = decoder(tf.random.uniform((BATCH_SIZE, 1)),
-                                      sample_hidden, sample_output)
-
-logger.info('Decoder output shape: (batch_size, vocab size) {}'.format(sample_decoder_output.shape))
-
-optimizer = tf.keras.optimizers.Adam()
-loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-    from_logits=True, reduction='none')
-
-
 def loss_function(real, pred):
     mask = tf.math.logical_not(tf.math.equal(real, 0))
     loss_ = loss_object(real, pred)
@@ -252,13 +182,6 @@ def loss_function(real, pred):
     loss_ *= mask
 
     return tf.reduce_mean(loss_)
-
-
-checkpoint_dir = './training_checkpoints'
-checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-checkpoint = tf.train.Checkpoint(optimizer=optimizer,
-                                 encoder=encoder,
-                                 decoder=decoder)
 
 
 # ******************************************* MODEL TRAINING *******************************************
@@ -319,6 +242,9 @@ def train_model(EPOCHS):
         print('Epoch {} Loss {:.4f}'.format(epoch + 1,
                                             total_loss / steps_per_epoch))
         print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+
+    with open('status.txt', 'w') as filetowrite:
+        filetowrite.write(str(status))
 
     # Stop training timer
     training_elapsed = timeit.default_timer() - training_start_time
@@ -497,7 +423,7 @@ def candidate_evaluate(sentence, candidate=None, id=None):
 
 
 # Calculating rank value for performance metrics
-def getRankValue(target_value, unsorted_distribution):
+def rank_value(target_value, unsorted_distribution):
     sorted_distribution = sorted(unsorted_distribution, reverse=True)
     for i in range(0, len(sorted_distribution)):
         value = sorted_distribution[i]
@@ -507,7 +433,7 @@ def getRankValue(target_value, unsorted_distribution):
 
 
 # Read and pre-process candidate specific data
-def loadTestData(filename):
+def candidate_load_dataset(filename):
     file = open(filename, mode='rt', encoding='utf-8')
     text = file.read()
     file.close()
@@ -539,7 +465,7 @@ def loadTestData(filename):
 def candidate_evaluate_model(filename_testdata):
     testing_start_time = timeit.default_timer()  # Start testing timer
 
-    candidates, contexts = loadTestData(filename_testdata)
+    candidates, contexts = candidate_load_dataset(filename_testdata)
     correct_predictions = 0
     total_predictions = 0
     cumulative_mrr = 0
@@ -572,7 +498,7 @@ def candidate_evaluate_model(filename_testdata):
 
             if id == 1: target_value = value_candidate
 
-        rank = getRankValue(target_value, distribution)
+        rank = rank_value(target_value, distribution)
         cumulative_mrr += rank
         correct_predictions += 1 if rank == 1 else 0
 
@@ -590,8 +516,6 @@ def candidate_evaluate_model(filename_testdata):
     with open(ref_file_path, mode='wt', encoding='utf-8') as ref_myfile:
         ref_myfile.write('\n'.join(ref_empty_list))
 
-    logger.info("Saving Complete!")
-
     logger.info(f"Saving response dialogue data to {resp_file_path}")
     with open(resp_file_path, mode='wt', encoding='utf-8') as resp_myfile:
         resp_myfile.write('\n'.join(resp_empty_list))
@@ -605,28 +529,149 @@ def candidate_evaluate_model(filename_testdata):
 
 # ******************************************* MAIN *******************************************
 
-# Allow the user to choose the domain being trained
-model_question = 'What action would you like to perform?  '
-model_answers = ['Train model', 'Evaluate model', 'Evaluate candidate model']
-model_option, index = pick(model_answers, model_question)
 
-if index == 0:
-    epoch_question = 'How many epochs to train? '
-    epoch_answer = [5, 10, 25, 50, 100]
-    epoch_option, index = pick(epoch_answer, epoch_question)
+def action():
+    all_data = ""
+    path_to_file = ""
+    status = ""
+    epoch_option = ""
 
-    if path.exists(checkpoint_dir):
-        logger.info("Removing previous checkpoints...\n")
-        for filename in os.listdir(checkpoint_dir):
-            os.remove(checkpoint_dir + "/" + filename)
+    # Gather status of model
+    model_status = '\nCurrent status: '
+    with open('status.txt', 'r') as file:
+        model_status += file.read()
 
+    # Allow the user to choose the domain being trained + report status
+    model_question = 'What action would you like to perform? (Evaluation must be performed according to previously ' \
+                     'trained model)\n' + model_status
+    model_answers = ['Train on pre-processed data', 'Train on provided candidate data',
+                     'Evaluate pre-processed data model',
+                     'Evaluate candidate data model']
+    model_option, index = pick(model_answers, model_question)
+
+    # Loop for training pre-processed data
+    if index == 0:
+        epoch_question = 'How many epochs to train? '
+        epoch_answer = [5, 10, 25, 50, 100]
+        epoch_option, index_epoch = pick(epoch_answer, epoch_question)
+
+        status = "The currently saved model is based on the 'pre-processed dataset' over " + str(
+            epoch_option) + " epochs."
+
+        if path.exists(checkpoint_dir):
+            logger.info("Removing previous checkpoints...\n")
+            for filename in os.listdir(checkpoint_dir):
+                os.remove(checkpoint_dir + "/" + filename)
+
+        all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
+        path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
+
+    # Loop for training provided candidate data
+    if index == 1:
+        epoch_question = 'How many epochs to train? '
+        epoch_answer = [5, 10, 25, 50, 100]
+        epoch_option, index_epoch = pick(epoch_answer, epoch_question)
+
+        status = "The currently saved model is based on the 'candidate dataset' over " + str(epoch_option) + " epochs."
+
+        if path.exists(checkpoint_dir):
+            logger.info("Removing previous checkpoints...\n")
+            for filename in os.listdir(checkpoint_dir):
+                os.remove(checkpoint_dir + "/" + filename)
+
+        all_data = current_dir + "/processed_data/candidate/all_data.txt"  # File path to all dialogue
+        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"  # File path to training dialogue
+
+    if index == 2:
+        all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
+        path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
+
+    if index == 3:
+        all_data = current_dir + "/processed_data/candidate/all_data.txt"  # File path to all dialogue
+        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"  # File path to training dialogue
+
+    return all_data, path_to_file, status, epoch_option, index
+
+
+# ******************************************* MODEL PARAMETERS *******************************************
+checkpoint_dir = './training_checkpoints'
+
+# ERROR BECAUSE STATUS NOT IN INDEX 2 / 3
+all_data, path_to_file, status, epoch_option, index = action()
+
+all_lang = all_dataset(all_data)  # Temp dataset for entire dataset
+
+# Create the tokenizer for all dialogue
+lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='', oov_token='<UNK>')
+lang_tokenizer.fit_on_texts(all_lang)
+
+num_examples = 10000  # CHANGEABLE (Size of data loaded)
+
+input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
+
+# Calculate max_length of the target tensors for future use
+max_length_inp, max_length_resp = response_tensor.shape[1], input_tensor.shape[1]
+
+# Rename training set (Already the training data)
+input_tensor_train, response_tensor_train = (input_tensor, response_tensor)
+
+print(len(input_tensor_train), len(response_tensor_train))  # Length of each set
+
+# Initialize the tf.data dataset variables
+BUFFER_SIZE = len(input_tensor_train)
+BATCH_SIZE = 64  # CHANGEABLE (32 or 64)
+steps_per_epoch = len(input_tensor_train) // BATCH_SIZE
+embedding_dim = 256  # Can vary
+units = 512  # CHANGEABLE (512 or 1024)
+vocab_inp_size = len(lang_tokenizer.word_index) + 1
+vocab_tar_size = len(lang_tokenizer.word_index) + 1
+
+# Create the tf.data dateset and shuffle
+dataset = tf.data.Dataset.from_tensor_slices((input_tensor_train, response_tensor_train)).shuffle(BUFFER_SIZE)
+dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
+
+# Show the TensorShape size
+example_input_batch, example_target_batch = next(iter(dataset))
+print(example_input_batch.shape, example_target_batch.shape)
+
+encoder = Encoder(vocab_inp_size, embedding_dim, units, BATCH_SIZE)
+
+# Sample input
+sample_hidden = encoder.initialize_hidden_state()
+sample_output, sample_hidden = encoder(example_input_batch, sample_hidden)
+logger.info('Encoder output shape: (batch size, sequence length, units) {}'.format(sample_output.shape))
+logger.info('Encoder Hidden state shape: (batch size, units) {}'.format(sample_hidden.shape))
+
+attention_layer = BahdanauAttention(10)
+attention_result, attention_weights = attention_layer(sample_hidden, sample_output)
+
+logger.info("Attention result shape: (batch size, units) {}".format(attention_result.shape))
+logger.info("Attention weights shape: (batch_size, sequence_length, 1) {}".format(attention_weights.shape))
+
+decoder = Decoder(vocab_tar_size, embedding_dim, units, BATCH_SIZE)
+
+sample_decoder_output, _, _ = decoder(tf.random.uniform((BATCH_SIZE, 1)),
+                                      sample_hidden, sample_output)
+
+logger.info('Decoder output shape: (batch_size, vocab size) {}'.format(sample_decoder_output.shape))
+
+optimizer = tf.keras.optimizers.Adam()
+loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+    from_logits=True, reduction='none')
+
+checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+checkpoint = tf.train.Checkpoint(optimizer=optimizer,
+                                 encoder=encoder,
+                                 decoder=decoder)
+
+if (index == 0) or (index == 1):
     train_model(epoch_option)
 
-if index == 1:
+if index == 2:
     checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
     evaluate_model()
 
 path_to_data_test = current_dir + "/processed_data/candidate/dstc8-test-candidates.txt"
-if index == 2:
+if index == 3:
     checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
     candidate_evaluate_model(path_to_data_test)

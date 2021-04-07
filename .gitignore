@@ -15,3 +15,5 @@ training_checkpoints/
 
 # REMOVE LATER
 BaselineChatbot.py
+
+status.txt

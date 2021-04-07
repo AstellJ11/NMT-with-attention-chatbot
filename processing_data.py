@@ -384,6 +384,9 @@ if __name__ == "__main__":
     else:
         logger.info("Successfully created the directory '%s'!" % new_test_dir2)
 
+    with open('status.txt', 'w') as filetowrite:
+        filetowrite.write("No model has been trained yet!")
+
     # Gather user chosen domain
     domain_option = domain_choice()
 
