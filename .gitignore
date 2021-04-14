@@ -5,11 +5,14 @@ __pycache__/
 .idea/discord.xml
 .idea/other.xml
 
+test.py
+
+raw_data/dstc8-schema-guided-dialogue/
+
 processed_data/BLEU
 processed_data/test
 processed_data/train
-raw_data/dstc8-schema-guided-dialogue/
-test.py
+processed_data/val
 
 training_checkpoints/
 

@@ -336,11 +336,11 @@ def WER(gt_path, hypothesis_path):
 
 
 # Main evaluation function
-def evaluate_model():
+def evaluate_model(filename):
     testing_start_time = timeit.default_timer()  # Start testing timer
 
     # Open the testing dialogue and split at new line
-    with open("processed_data/test/input_testing_dialogue.txt") as f:
+    with open(filename) as f:
         content = f.readlines()
     content = [x.strip() for x in content]  # Remove \n characters
 
@@ -559,11 +559,12 @@ def action():
     model_question = 'What action would you like to perform? (Evaluation must be performed according to previously ' \
                      'trained model)\n' + model_status
     model_answers = ['Train on pre-processed data', 'Train on provided candidate data',
-                     'Evaluate pre-processed data model',
-                     'Evaluate candidate data model']
+                     'Measure the performance of pre-processed data model using validation dataset',
+                     'Measure the performance of candidate data model using validation dataset',
+                     'Evaluate pre-processed data model', 'Evaluate candidate data model']
     model_option, index = pick(model_answers, model_question)
 
-    # Loop for training pre-processed data
+    # Loop for training on pre-processed data
     if index == 0:
         epoch_question = 'How many epochs to train? '
         epoch_answer = [5, 10, 25, 50, 100]
@@ -580,7 +581,7 @@ def action():
         all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
         path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
 
-    # Loop for training provided candidate data
+    # Loop for training on candidate data
     if index == 1:
         epoch_question = 'How many epochs to train? '
         epoch_answer = [5, 10, 25, 50, 100]
@@ -593,16 +594,28 @@ def action():
             for filename in os.listdir(checkpoint_dir):
                 os.remove(checkpoint_dir + "/" + filename)
 
-        all_data = current_dir + "/processed_data/candidate/all_data.txt"  # File path to all dialogue
-        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"  # File path to training dialogue
+        all_data = current_dir + "/processed_data/candidate/all_data.txt"
+        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"
 
+    # Loop for validation on pre-processed data
     if index == 2:
-        all_data = current_dir + "/processed_data/train/all_dialogue.txt"  # File path to all dialogue
-        path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"  # File path to training dialogue
+        all_data = current_dir + "/processed_data/val/all_dialogue(train+val).txt"
+        path_to_file = current_dir + "/processed_data/val/all_val_dialogue.txt"
 
+    # Loop for validation on candidate data
     if index == 3:
-        all_data = current_dir + "/processed_data/candidate/all_data.txt"  # File path to all dialogue
-        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"  # File path to training dialogue
+        all_data = current_dir + "/processed_data/candidate/all_data.txt"
+        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"
+
+    # Loop for evaluation of pre-processed data trained model
+    if index == 4:
+        all_data = current_dir + "/processed_data/train/all_dialogue.txt"
+        path_to_file = current_dir + "/processed_data/train/all_training_dialogue.txt"
+
+    # Loop for evaluation of candidate data trained model
+    if index == 5:
+        all_data = current_dir + "/processed_data/candidate/all_data.txt"
+        path_to_file = current_dir + "/processed_data/candidate/dstc8-train.txt"
 
     return all_data, path_to_file, status, epoch_option, index
 
@@ -619,7 +632,7 @@ all_lang = all_dataset(all_data)  # Temp dataset for entire dataset
 lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='', oov_token='<UNK>')
 lang_tokenizer.fit_on_texts(all_lang)
 
-num_examples = 10000  # CHANGEABLE (Size of data loaded)
+num_examples = 30000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
 
@@ -682,10 +695,21 @@ if (index == 0) or (index == 1):
     train_model(epoch_option)
 
 if index == 2:
+    path_to_data_val = "processed_data/val/input_val_dialogue.txt"
     checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
-    evaluate_model()
+    evaluate_model(path_to_data_val)
 
-path_to_data_test = current_dir + "/processed_data/candidate/dstc8-test-candidates.txt"
 if index == 3:
+    path_to_data_val = current_dir + "/processed_data/candidate/dstc8-val-candidates.txt"
+    checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+    candidate_evaluate_model(path_to_data_val)
+
+if index == 4:
+    path_to_data_test = "processed_data/test/input_testing_dialogue.txt"
+    checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+    evaluate_model(path_to_data_test)
+
+if index == 5:
+    path_to_data_test = current_dir + "/processed_data/candidate/dstc8-test-candidates.txt"
     checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
     candidate_evaluate_model(path_to_data_test)

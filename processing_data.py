@@ -180,9 +180,10 @@ def testing_input_utterance(inp_dir, out_dir):
     logger.info("Processing Complete!")
 
 
-# output_train_dir + output_test_dir
+# output_train_dir + output_test_dir + output_val_dir
 def all_utterance(out_dir):
-    filenames = ["processed_data/train/all_training_dialogue.txt", "processed_data/test/all_testing_dialogue.txt"]
+    filenames = ["processed_data/train/all_training_dialogue.txt", "processed_data/test/all_testing_dialogue.txt",
+                 "processed_data/val/all_val_dialogue.txt"]
     with open(out_dir, 'w') as outfile:
         for fname in filenames:
             with open(fname) as infile:
@@ -351,20 +352,29 @@ sys.path.insert(0, parent_dir)
 # Unprocessed train + test directories
 train_dir = "raw_data/dstc8-schema-guided-dialogue/train"
 test_dir = "raw_data/dstc8-schema-guided-dialogue/test"
+val_dir = "raw_data/dstc8-schema-guided-dialogue/dev"
 
 # Processed train + test directories
 output_train_dir = "processed_data/train/all_training_dialogue.txt"
+
 output_test_dir = "processed_data/test/all_testing_dialogue.txt"
 output_test_dir2 = "processed_data/BLEU/human_translated_dialogue.txt"
 output_test_dir3 = "processed_data/test/input_testing_dialogue.txt"
 output_all_dir = "processed_data/train/all_dialogue.txt"
 output_context_dir = "processed_data/train/increased_context_training_dialogue.txt"
 
+output_val_dir = "processed_data/val/all_val_dialogue.txt"
+output_val_dir2 = "processed_data/BLEU/human_translated_dialogue(val).txt"
+output_val_dir3 = "processed_data/val/input_val_dialogue.txt"
+output_all_val_dir = "processed_data/val/all_dialogue(train+val).txt"
+
 if __name__ == "__main__":
     # Create processed_data folders for all final dialogues
     new_train_dir = Path(current_dir, "processed_data/train")
     new_test_dir = Path(current_dir, "processed_data/test")
     new_test_dir2 = Path(current_dir, "processed_data/BLEU")
+    new_val_dir = Path(current_dir, "processed_data/val")
+
     try:
         os.makedirs(new_train_dir)
     except OSError:
@@ -377,6 +387,12 @@ if __name__ == "__main__":
         logger.info("Creation of the directory '%s' failed. It may already exist." % new_test_dir)
     else:
         logger.info("Successfully created the directory '%s'!" % new_test_dir)
+    try:
+        os.makedirs(new_val_dir)
+    except OSError:
+        logger.info("Creation of the directory '%s' failed. It may already exist." % new_val_dir)
+    else:
+        logger.info("Successfully created the directory '%s'!" % new_val_dir)
     try:
         os.makedirs(new_test_dir2)
     except OSError:
@@ -399,24 +415,34 @@ if __name__ == "__main__":
         # Extract training + testing utterances
         extract_utterance(train_dir, output_train_dir)
         extract_utterance(test_dir, output_test_dir)
+        extract_utterance(val_dir, output_val_dir)
 
         # Data for BLEU score
         testing_translated_utterance(test_dir, output_test_dir2)  # Human translated response for BLEU score
+        testing_translated_utterance(val_dir, output_val_dir2)  # Human translated response for BLEU score
+
         testing_input_utterance(test_dir, output_test_dir3)  # Pure testing data to be evaluated
+        testing_input_utterance(val_dir, output_val_dir3)  # Pure testing data to be evaluated
 
         # Data for tokenizer
         all_utterance(output_all_dir)
+        all_utterance(output_all_val_dir)
 
     else:
         # Data without slot values
         slotted_utterance(train_dir, output_train_dir)
         slotted_utterance(test_dir, output_test_dir)
+        slotted_utterance(val_dir, output_val_dir)
 
         # Data for BLEU score
         slotted_testing_translated_utterance(test_dir, output_test_dir2)
+        slotted_testing_translated_utterance(val_dir, output_val_dir2)
+
         slotted_testing_input_utterance(test_dir, output_test_dir3)
+        slotted_testing_input_utterance(val_dir, output_val_dir3)
 
         # Data for tokenizer
         all_utterance(output_all_dir)
+        all_utterance(output_all_val_dir)
 
     # increased_context_utterance(train_dir ,output_context_dir)
