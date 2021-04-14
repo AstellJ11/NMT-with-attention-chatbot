@@ -395,6 +395,7 @@ def candidate_evaluate(sentence, candidate=None, id=None):
     dec_input = tf.expand_dims([lang_tokenizer.word_index['<start>']], 0)
 
     candidate_words = []
+    # For candidate data
     if candidate != None:
         candidate = candidate + " <end>"
         for word in candidate.split(' '):
@@ -404,6 +405,7 @@ def candidate_evaluate(sentence, candidate=None, id=None):
     for t in range(max_length_resp):
         predictions, dec_hidden, attention_weights = decoder(dec_input, dec_hidden, enc_out)
 
+        # If not candidate
         if candidate == None:
             predicted_id = tf.argmax(predictions[0]).numpy()
         else:
@@ -424,25 +426,28 @@ def candidate_evaluate(sentence, candidate=None, id=None):
 
 # Calculating rank value for performance metrics
 def rank_value(target_value, unsorted_distribution):
-    sorted_distribution = sorted(unsorted_distribution, reverse=True)
+    sorted_distribution = sorted(unsorted_distribution, reverse=True)  # Sort the distribution list
     for i in range(0, len(sorted_distribution)):
-        value = sorted_distribution[i]
+        value = sorted_distribution[i]  # Value equal to candidate distance value
         if value == target_value:
-            return 1 / (i + 1)
+            return 1 / (i + 1)  # Calculate distance away from ground truth
     return None
 
 
-# Read and pre-process candidate specific data
+# Read and pre-process candidate specific data as different format
 def candidate_load_dataset(filename):
+    # File opening
     file = open(filename, mode='rt', encoding='utf-8')
     text = file.read()
     file.close()
     lines = text.strip().split('\n')
 
+    # Init empty lists
     allCandidates = []
     candidates = []
     contexts = []
 
+    # Take each line that displays a candidate and append it to candidate list
     for i in range(0, len(lines)):
         if lines[i].startswith("CONTEXT:"):
             candidate = lines[i][8:]
@@ -457,7 +462,7 @@ def candidate_load_dataset(filename):
             candidate = lines[i][12:]
             candidates.append(candidate)
 
-    allCandidates.append(candidates)
+    allCandidates.append(candidates)  # Create overall candidate list
     return allCandidates, contexts
 
 
@@ -465,6 +470,7 @@ def candidate_load_dataset(filename):
 def candidate_evaluate_model(filename_testdata):
     testing_start_time = timeit.default_timer()  # Start testing timer
 
+    # Init variables/list
     candidates, contexts = candidate_load_dataset(filename_testdata)
     correct_predictions = 0
     total_predictions = 0
@@ -474,6 +480,7 @@ def candidate_evaluate_model(filename_testdata):
     ref_empty_list = []
     resp_empty_list = []
 
+    # For all candidates using tqdm progress bar
     for i in tqdm.tqdm(range(0, len(contexts)), desc='Evaluating model'):
         total_predictions += 1
         target_value = 0
@@ -483,30 +490,30 @@ def candidate_evaluate_model(filename_testdata):
         distribution = []
         jobs = []
 
+        # Using 'concurrent.features. to enable parallel and reduce execution time
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            jobs.append(executor.submit(candidate_evaluate, context, None, 0))
+            jobs.append(executor.submit(candidate_evaluate, context, None, 0))  # candidate_evaluate function
             for j in range(0, len(candidates[i])):
                 jobs.append(executor.submit(candidate_evaluate, context, candidates[i][j], (j + 1)))
 
         for future in concurrent.futures.as_completed(jobs):
-            candidate_sentence, value_candidate, id, inp_sentence = future.result()
+            candidate_sentence, value_candidate, id, inp_sentence = future.result()  # Return function variables
+            # First id is the response
             if id == 0:
                 response = candidate_sentence
-                resp_empty_list.append(response)
+                resp_empty_list.append(response)  # Add to response list for BLEU evaluation
+            # Add the value to the distribution before being passed into the rank_value function
             else:
                 distribution.append(value_candidate)
 
-            if id == 1: target_value = value_candidate
+            if id == 1: target_value = value_candidate  # Ground-truth response
 
         rank = rank_value(target_value, distribution)
-        cumulative_mrr += rank
-        correct_predictions += 1 if rank == 1 else 0
+        cumulative_mrr += rank  # Running total of rank to be divided later
+        correct_predictions += 1 if rank == 1 else 0  # Running total of correct predictions
 
-        recall_at_1 = correct_predictions / total_predictions
-        mrr = cumulative_mrr / total_predictions
-
-    print("RECALL@1=" + str(recall_at_1))
-    print("Mean Reciprocal Rank=" + str(mrr))
+        recall_at_1 = correct_predictions / total_predictions  # Final recall@1 calc
+        mrr = cumulative_mrr / total_predictions  # Final mrr calc
 
     # File Saving
     ref_file_path = "processed_data/BLEU/human_translated_dialogue.txt"
@@ -521,6 +528,13 @@ def candidate_evaluate_model(filename_testdata):
         resp_myfile.write('\n'.join(resp_empty_list))
 
     logger.info("Saving Complete!")
+
+    # Calculating the word error rate + print in function
+    WER(ref_file_path, resp_file_path)
+
+    # Print results
+    print("The Recall@1 value is: " + str(recall_at_1))
+    print("The Mean Reciprocal Rank value is: " + str(mrr))
 
     # Stop testing timer
     testing_elapsed = timeit.default_timer() - testing_start_time
