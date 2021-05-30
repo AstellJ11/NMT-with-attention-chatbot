@@ -15,8 +15,4 @@ processed_data/train
 processed_data/val
 
 training_checkpoints/
-
-# REMOVE LATER
-BaselineChatbot.py
-
 status.txt

@@ -1,3 +1,7 @@
+# Created by James Astell (17668733) as a partial fulfilment of the requirements for the
+# Degree of BSc(Hons) Computer Science
+# Section of code derived from: https://www.tensorflow.org/text/tutorials/nmt_with_attention
+
 import os
 import sys
 import re
@@ -330,7 +334,7 @@ def WER(gt_path, hypothesis_path):
 
     error = wer(GTsentences, Hsentences)
     logger.info("Calculating the word error rate...")
-    print("The word error rate is: ", round((error) * 100, 2), "%", sep='')
+    print("The word error rate is: ", round(error, 2))
 
     return error
 
@@ -492,9 +496,9 @@ def candidate_evaluate_model(filename_testdata):
 
         # Using 'concurrent.features. to enable parallel and reduce execution time
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            jobs.append(executor.submit(candidate_evaluate, context, None, 0))  # candidate_evaluate function
+            jobs.append(executor.submit(candidate_evaluate, context, None, 0))
             for j in range(0, len(candidates[i])):
-                jobs.append(executor.submit(candidate_evaluate, context, candidates[i][j], (j + 1)))
+                jobs.append(executor.submit(candidate_evaluate, context, candidates[i][j], (j + 1)))  # candidate_evaluate function
 
         for future in concurrent.futures.as_completed(jobs):
             candidate_sentence, value_candidate, id, inp_sentence = future.result()  # Return function variables
@@ -529,20 +533,18 @@ def candidate_evaluate_model(filename_testdata):
 
     logger.info("Saving Complete!")
 
-    # Calculating the word error rate + print in function
-    WER(ref_file_path, resp_file_path)
-
     # Print results
     print("The Recall@1 value is: " + str(recall_at_1))
     print("The Mean Reciprocal Rank value is: " + str(mrr))
+    # Calculating the word error rate + print in function
+    WER(ref_file_path, resp_file_path)
 
     # Stop testing timer
     testing_elapsed = timeit.default_timer() - testing_start_time
     print("Time taken testing:", round(testing_elapsed), "sec")
 
 
-# ******************************************* MAIN *******************************************
-
+# ******************************************* USER INPUT *******************************************
 
 def action():
     all_data = ""
@@ -621,9 +623,9 @@ def action():
 
 
 # ******************************************* MODEL PARAMETERS *******************************************
+
 checkpoint_dir = './training_checkpoints'
 
-# ERROR BECAUSE STATUS NOT IN INDEX 2 / 3
 all_data, path_to_file, status, epoch_option, index = action()
 
 all_lang = all_dataset(all_data)  # Temp dataset for entire dataset
@@ -632,7 +634,7 @@ all_lang = all_dataset(all_data)  # Temp dataset for entire dataset
 lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='', oov_token='<UNK>')
 lang_tokenizer.fit_on_texts(all_lang)
 
-num_examples = 30000  # CHANGEABLE (Size of data loaded)
+num_examples = 60000  # CHANGEABLE (Size of data loaded)
 
 input_tensor, response_tensor, inp_maxlen, resp_maxlen = load_dataset(path_to_file, num_examples)
 
@@ -644,12 +646,12 @@ input_tensor_train, response_tensor_train = (input_tensor, response_tensor)
 
 print(len(input_tensor_train), len(response_tensor_train))  # Length of each set
 
-# Initialize the tf.data dataset variables
+# Initialize the tf.data dataset variables (chosen using val datset for best results)
 BUFFER_SIZE = len(input_tensor_train)
 BATCH_SIZE = 64  # CHANGEABLE (32 or 64)
 steps_per_epoch = len(input_tensor_train) // BATCH_SIZE
-embedding_dim = 256  # Can vary
-units = 512  # CHANGEABLE (512 or 1024)
+embedding_dim = 256  # CHANGEABLE (256 or 512 or 1024)
+units = 512  # CHANGEABLE (256 or 512)
 vocab_inp_size = len(lang_tokenizer.word_index) + 1
 vocab_tar_size = len(lang_tokenizer.word_index) + 1
 
@@ -690,6 +692,8 @@ checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 checkpoint = tf.train.Checkpoint(optimizer=optimizer,
                                  encoder=encoder,
                                  decoder=decoder)
+
+# ******************************************* MAIN *******************************************
 
 if (index == 0) or (index == 1):
     train_model(epoch_option)

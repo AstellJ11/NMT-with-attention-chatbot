@@ -1,0 +1,8 @@
+jiwer==2.2.0
+tf_nightly==2.6.0.dev20210419
+numpy==1.19.2
+matplotlib==3.3.4
+tqdm==4.59.0
+pick==1.0.0
+scikit_learn==0.24.2
+tensorflow==2.5.0
